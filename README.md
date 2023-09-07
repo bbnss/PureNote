@@ -12,7 +12,13 @@ Easy Navigation
 
 # Installation
 To install the app on your Android device, download the APK file and follow the installation prompts.
+[![Play Store](images/google-play-badge-PureNote.png)](https://play.google.com/store/apps/details?id=bbnss.test.purenote&pcampaignid=web_share)
+
 https://play.google.com/store/apps/details?id=bbnss.test.purenote&pcampaignid=web_share
+
+# Screenshot
+![Screenshot dell'app](images/Screenshot_PureNote.png), ![Screenshot dell'app](images/Screenshot2_PureNote.png)
+
 
 # Technologies Used
 Python
