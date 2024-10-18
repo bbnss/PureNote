@@ -7,7 +7,6 @@ SimpleNoteApp is a simplistic yet feature-rich note-taking application for Andro
 # Features
 Create and Edit Notes
 Save Notes Locally
-Intuitive User Interface
 Easy Navigation
 
 # Installation
@@ -24,6 +23,3 @@ https://play.google.com/store/apps/details?id=bbnss.test.purenote&pcampaignid=we
 Python
 Kivy
 Buildozer
-
-# Contributing
-If you wish to contribute, please open an issue to discuss your ideas or directly create a pull request.
