@@ -22,3 +22,8 @@ To install the app on your Android device, download the APK file and follow the 
 [![Play Store](images/google-play-badge-PureNote.png)](https://play.google.com/store/apps/details?id=bbnss.test.purenote&pcampaignid=web_share)
 
 https://play.google.com/store/apps/details?id=bbnss.test.purenote&pcampaignid=web_share
+
+OR
+
+## APK Android
+https://github.com/bbnss/PureNote/releases/tag/APK
