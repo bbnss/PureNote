@@ -1,5 +1,5 @@
 # PureNote
-Basic note-taking application for Android, built with Python and Kivy. Store your notes locally for quick access and privacy.
+Basic note-taking Android app, built with Python and Kivy. Store your notes locally for quick access and privacy.
 
 # Features
 Create and Edit Notes
