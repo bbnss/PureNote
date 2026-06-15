@@ -41,6 +41,9 @@ fullscreen = 0
 # Android specific
 #
 
+# (bool) If True, then automatically accept SDK license
+android.accept_sdk_license = True
+
 # (list) Permissions
 android.permissions = WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE
 
