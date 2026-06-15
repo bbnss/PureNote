@@ -188,10 +188,15 @@ class RootManager(ScreenManager):
 # ----------------------------------------------------------------------- app
 class PureNoteApp(App):
     tags = ListProperty([])
+    # Safe-area insets (px). Android 15 (target API 35) draws edge-to-edge,
+    # so we pad content away from the status bar (top) and nav bar (bottom).
+    inset_top = NumericProperty(0)
+    inset_bottom = NumericProperty(0)
 
     def build(self):
         self.title = "PureNote"
         Window.clearcolor = theme.BG
+        self._read_android_insets()
         os.environ.setdefault(
             "PURENOTE_DB", os.path.join(_user_dir(), "notes.db")
         )
@@ -208,6 +213,29 @@ class PureNoteApp(App):
         )
         Clock.schedule_once(lambda *_: self.refresh_list(), 0)
         return root
+
+    def _read_android_insets(self):
+        """Read system bar heights (px) so content clears the status/nav bars.
+
+        Android 15 enforces edge-to-edge for apps targeting API 35; without
+        this the top bar hides under the clock and the Save button/FAB hide
+        under the gesture/nav bar. No-op on desktop.
+        """
+        try:
+            from jnius import autoclass
+
+            activity = autoclass("org.kivy.android.PythonActivity").mActivity
+            res = activity.getResources()
+
+            def dim(name):
+                rid = res.getIdentifier(name, "dimen", "android")
+                return res.getDimensionPixelSize(rid) if rid > 0 else 0
+
+            self.inset_top = dim("status_bar_height")
+            self.inset_bottom = dim("navigation_bar_height")
+        except Exception:
+            self.inset_top = 0
+            self.inset_bottom = 0
 
     # ----------------------------------------------------------- navigation
     @property
