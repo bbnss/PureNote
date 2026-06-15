@@ -1,11 +1,29 @@
 # PureNote
-Basic note-taking application for Android, built with Python and Kivy. Store your notes locally for quick access and privacy. Android app.
+A retro/CRT note-taking app for Android, built with Python and Kivy. 100% local and private — no cloud, no account. Your notes live in a local SQLite database.
 
 # Features
-Create and Edit Notes
-Save Notes Locally
-Counter letters in the notes
-Easy Navigation
+- Multi-note with titles, tags and creation/modification dates
+- Live search across titles and bodies
+- Tag filtering
+- Markdown editor with live preview (headings, bold, italic, code, bullet & checklists)
+- Pin important notes to the top
+- Word / character counter
+- Export a note as Markdown and full database backup
+- Retro phosphor-green CRT theme
+
+# Run (desktop)
+```
+python3 -m venv .venv
+.venv/bin/pip install "kivy[base]"
+.venv/bin/python main.py
+```
+
+# Build (Android)
+```
+pip install buildozer
+buildozer -v android debug        # APK
+buildozer -v android release      # AAB
+```
 
 
 # Screenshot

@@ -1,174 +1,348 @@
-import sqlite3
+"""PureNote — a retro/CRT local note app built with Kivy.
+
+100% offline: notes live in a local SQLite file. Refreshed from the original
+single-textbox version to a multi-note app with titles, dates, search, tags,
+markdown preview and export/backup.
+"""
+
+import os
+import time
+
+from kivy.config import Config
+
 from kivy.app import App
-from kivy.uix.button import Button
-from kivy.uix.textinput import TextInput
-from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.recycleview import RecycleView
-from kivy.uix.popup import Popup
-from kivy.uix.recycleview.views import RecycleDataViewBehavior
-from kivy.uix.label import Label
-from kivy.properties import BooleanProperty, StringProperty
+from kivy.core.window import Window
+from kivy.clock import Clock
 from kivy.lang import Builder
-from kivy.uix.image import Image
+from kivy.properties import (
+    BooleanProperty,
+    ColorProperty,
+    NumericProperty,
+    ListProperty,
+    StringProperty,
+)
+from kivy.uix.behaviors import ButtonBehavior
+from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.label import Label
+from kivy.uix.screenmanager import Screen, ScreenManager, SlideTransition
+from kivy.uix.textinput import TextInput
+
+import theme
+import md
+from db import NoteStore
 
 
-# Setup the database
-conn = sqlite3.connect('notes.db')
-c = conn.cursor()
-c.execute('''CREATE TABLE IF NOT EXISTS notes
-             (note text)''')
+def _user_dir():
+    """Writable base dir: app user_data_dir on Android, cwd elsewhere."""
+    try:
+        from android.storage import app_storage_path  # noqa
 
-# Define RecycleView in KV language
-Builder.load_string('''
-<SelectableBoxLayout>:
-    orientation: 'horizontal'
-    Label:
-        text: root.display_text
-    Button:
-        text: 'Delete'
-        on_press: root.delete_note()
+        return app_storage_path()
+    except Exception:
+        return os.path.dirname(os.path.abspath(__file__))
 
-<SelectableBoxLayout>:
-    # Draw a background to indicate selection
-    canvas.before:
-        Color:
-            rgba: (.0, .9, .1, .3) if self.selected else (0, 0, 0, 1)
-        Rectangle:
-            pos: self.pos
-            size: self.size
 
-<RV>:
-    viewclass: 'SelectableBoxLayout'
-    RecycleBoxLayout:
-        default_size: None, dp(56)
-        default_size_hint: 1, None
-        size_hint_y: None
-        height: self.minimum_height
-        orientation: 'vertical'
-''')
+def _fmt_date(ts):
+    if not ts:
+        return ""
+    return time.strftime("%d/%m/%Y %H:%M", time.localtime(ts))
 
-class SelectableBoxLayout(RecycleDataViewBehavior, BoxLayout):
-    """ Add selection support to the BoxLayout """
-    text = StringProperty()
-    display_text = StringProperty()
-    selected = BooleanProperty(False)
 
-    def on_text(self, instance, value):
-        self.display_text = value[:15] + ' (' + str(len(value)) + ')'
+def _snippet(body, n=90):
+    text = " ".join((body or "").split())
+    return text[:n] + ("..." if len(text) > n else "")
 
-    def on_touch_down(self, touch):
-        if super(SelectableBoxLayout, self).on_touch_down(touch):
-            return True
-        if self.collide_point(*touch.pos):
-            return self.select_note(touch)
 
-    def select_note(self, touch):
-        if self.selected:
-            return False
+# ------------------------------------------------------------ styled widgets
+# Defined in Python so `accent` always has a real (iterable) default before
+# the kv canvas rules reference accent[0]/[1]/[2].
+class RetroButton(ButtonBehavior, Label):
+    accent = ColorProperty(theme.GREEN)
+
+
+class GhostButton(ButtonBehavior, Label):
+    accent = ColorProperty(theme.GREEN)
+
+
+class IconButton(ButtonBehavior, Label):
+    accent = ColorProperty(theme.GREEN)
+
+
+class RetroInput(TextInput):
+    pass
+
+
+# ---------------------------------------------------------------- list screen
+class NoteCard(ButtonBehavior, BoxLayout):
+    note_id = NumericProperty(0)
+    title = StringProperty()
+    snippet = StringProperty()
+    meta = StringProperty()
+    pinned = BooleanProperty(False)
+
+    def on_release(self):
+        App.get_running_app().open_editor(self.note_id)
+
+    def toggle_pin(self):
+        app = App.get_running_app()
+        app.store.set_pinned(self.note_id, not self.pinned)
+        app.refresh_list()
+
+
+class TagChip(ButtonBehavior, BoxLayout):
+    tag = StringProperty()
+    active = BooleanProperty(False)
+
+    def on_release(self):
+        app = App.get_running_app()
+        app.set_tag_filter("" if self.active else self.tag)
+
+
+class ListScreen(Screen):
+    query = StringProperty("")
+    active_tag = StringProperty("")
+
+
+# -------------------------------------------------------------- editor screen
+class EditorScreen(Screen):
+    note_id = NumericProperty(0)        # 0 == new note
+    preview = BooleanProperty(False)
+    pinned = BooleanProperty(False)
+    counts = StringProperty("")
+    preview_markup = StringProperty("")
+
+    def load(self, note_id):
+        self.note_id = note_id or 0
+        self.preview = False
+        app = App.get_running_app()
+        if note_id:
+            n = app.store.get(note_id)
+            self.ids.title.text = n["title"]
+            self.ids.body.text = n["body"]
+            self.ids.tags.text = n["tags"]
+            self.pinned = bool(n["pinned"])
         else:
-            # Deselect the previously selected note, if there is one
-            if App.get_running_app().selected_note is not None:
-                App.get_running_app().selected_note.selected = False
+            self.ids.title.text = ""
+            self.ids.body.text = ""
+            self.ids.tags.text = ""
+            self.pinned = False
+        self.update_counts()
 
-            # Select the current note
-            self.selected = True
-            App.get_running_app().selected_note = self
-            App.get_running_app().note_input.text = self.text
-            App.get_running_app().note_popup.dismiss()
-            return True
+    def update_counts(self, *_):
+        body = self.ids.body.text
+        chars = len(body)
+        words = len(body.split())
+        self.counts = f"{words} parole / {chars} caratteri"
+
+    def toggle_preview(self):
+        if not self.preview:
+            self.preview_markup = md.to_markup(self.ids.body.text)
+        self.preview = not self.preview
+
+    def toggle_pin(self):
+        self.pinned = not self.pinned
+
+    def save(self):
+        app = App.get_running_app()
+        title = self.ids.title.text.strip()
+        body = self.ids.body.text
+        tags = ",".join(
+            t.strip() for t in self.ids.tags.text.split(",") if t.strip()
+        )
+        if not title and not body.strip():
+            app.go_list()
+            return
+        if not title:
+            title = NoteStore._title_from_body(body)
+        if self.note_id:
+            app.store.update(self.note_id, title, body, tags, self.pinned)
+        else:
+            self.note_id = app.store.add(title, body, tags, self.pinned)
+        app.go_list()
+
+    def delete(self):
+        app = App.get_running_app()
+        if self.note_id:
+            app.confirm(
+                f'Eliminare "{self.ids.title.text or "questa nota"}"?',
+                self._do_delete,
+            )
+        else:
+            app.go_list()
+
+    def _do_delete(self):
+        app = App.get_running_app()
+        app.store.delete(self.note_id)
+        app.go_list()
+
+    def export(self):
+        App.get_running_app().export_note(
+            self.ids.title.text, self.ids.body.text
+        )
 
 
-    def delete_note(self):
-        def delete(btn):
-            c.execute("DELETE FROM notes WHERE note=?", (self.text,))
-            conn.commit()
-            App.get_running_app().note_list.fetch_notes()
-            confirm_popup.dismiss()
-
-        confirm_popup = Popup(title='Confirm Delete')
-        confirm_layout = BoxLayout(orientation='vertical')
-        confirm_layout.add_widget(Label(text=f'Are you sure you want to delete "{self.text}"?'))
-        button_layout = BoxLayout(orientation='horizontal')
-        button_layout.add_widget(Button(text='Yes', on_press=delete))
-        button_layout.add_widget(Button(text='Cancel', on_press=confirm_popup.dismiss))
-        confirm_layout.add_widget(button_layout)
-        confirm_popup.content = confirm_layout
-        confirm_popup.open()
-
-class RV(RecycleView):
-    def __init__(self, **kwargs):
-        super(RV, self).__init__(**kwargs)
-        self.fetch_notes()
-
-    def fetch_notes(self):
-        c.execute('SELECT * FROM notes')
-        self.data = [{'text': str(row[0])} for row in c.fetchall()]
+class RootManager(ScreenManager):
+    pass
 
 
-
-class NoteApp(App):
-    
-    def __init__(self, **kwargs):
-        super(NoteApp, self).__init__(**kwargs)
-        # Initialize the selected note to None
-        self.selected_note = None
+# ----------------------------------------------------------------------- app
+class PureNoteApp(App):
+    tags = ListProperty([])
 
     def build(self):
-        # Main layout
-        box = BoxLayout(orientation='vertical')
+        self.title = "PureNote"
+        Window.clearcolor = theme.BG
+        os.environ.setdefault(
+            "PURENOTE_DB", os.path.join(_user_dir(), "notes.db")
+        )
+        # Keep the bundled legacy/seed db if the user dir is empty.
+        seed = os.path.join(os.path.dirname(__file__), "notes.db")
+        target = os.environ["PURENOTE_DB"]
+        if seed != target and not os.path.exists(target) and os.path.exists(seed):
+            import shutil
 
-        top_layout = BoxLayout(orientation='horizontal', size_hint_y=None, height=100)
-        top_layout.add_widget(Button(text='New Note', font_name='TT.ttf', on_press=self.new_note, size_hint_x=0.25, background_color=(0, 1, 0, 1), color=(1, 1, 0, 1)))
-        top_layout.add_widget(Button(text='List', font_name='TT.ttf', on_press=self.show_saved_notes, size_hint_x=0.25, background_color=(0, 0, 0, 1), color=(1, 0, 1, 1)))
-        top_layout.add_widget(Button(text='Delete', font_name='TT.ttf', on_press=self.delete_note, size_hint_x=0.25, background_color=(0, 1, 0, 1), color=(1, 1, 0, 1)))
-        top_layout.add_widget(Button(text='Save', font_name='TT.ttf', on_press=self.save_note, size_hint_x=0.25, background_color=(0, 0, 0, 1), color=(1, 0, 1, 1)))
-        
-        box.add_widget(top_layout)
+            shutil.copyfile(seed, target)
+        self.store = NoteStore(target)
+        root = Builder.load_file(
+            os.path.join(os.path.dirname(__file__), "purenote_ui.kv")
+        )
+        Clock.schedule_once(lambda *_: self.refresh_list(), 0)
+        return root
 
-        # Text input for new note
-        self.note_input = TextInput(font_name='GS.ttf', background_color=[1, 1, 1, 1])
+    # ----------------------------------------------------------- navigation
+    @property
+    def sm(self):
+        return self.root
 
-        box.add_widget(self.note_input)
+    def open_editor(self, note_id):
+        self.sm.transition = SlideTransition(direction="left")
+        self.sm.get_screen("editor").load(note_id)
+        self.sm.current = "editor"
 
-        # Popup for saved notes
-        self.note_list = RV()
-        self.note_popup = Popup(title='Saved Notes', content=self.note_list)
+    def new_note(self):
+        self.open_editor(0)
 
-        # Add banner image at the bottom
-        banner = Image(source='anelli.png', size_hint_y=None, height=100, allow_stretch=True, keep_ratio=False)
+    def go_list(self):
+        self.sm.transition = SlideTransition(direction="right")
+        self.sm.current = "list"
+        self.refresh_list()
 
-        box.add_widget(banner)
+    # -------------------------------------------------------------- list data
+    def set_query(self, text):
+        self.sm.get_screen("list").query = text
+        self.refresh_list()
 
-        return box
+    def set_tag_filter(self, tag):
+        self.sm.get_screen("list").active_tag = tag
+        self.refresh_list()
 
-    def new_note(self, instance):
-        self.note_input.text = ''
+    def refresh_list(self):
+        ls = self.sm.get_screen("list")
+        notes = self.store.list(query=ls.query, tag=ls.active_tag)
+        ls.ids.rv.data = [
+            {
+                "note_id": n["id"],
+                "title": n["title"] or "Senza titolo",
+                "snippet": _snippet(n["body"]),
+                "meta": _fmt_date(n["updated_at"]),
+                "pinned": bool(n["pinned"]),
+            }
+            for n in notes
+        ]
+        ls.ids.empty.opacity = 0 if notes else 1
+        self._rebuild_tags(ls)
 
-    def save_note(self, instance):
-        c.execute("INSERT INTO notes VALUES (?)", (self.note_input.text,))
-        conn.commit()
-        self.note_list.fetch_notes()
+    def _rebuild_tags(self, ls):
+        bar = ls.ids.tagbar
+        bar.clear_widgets()
+        tags = self.store.all_tags()
+        for t in tags:
+            chip = TagChip(tag=t, active=(t == ls.active_tag))
+            bar.add_widget(chip)
+        ls.ids.tagscroll.opacity = 1 if tags else 0
+        ls.ids.tagscroll.height = "36dp" if tags else 0
 
-    def delete_note(self, instance):
-        def delete(btn):
-            c.execute("DELETE FROM notes WHERE note=?", (self.note_input.text,))
-            conn.commit()
-            self.note_list.fetch_notes()
-            self.note_input.text = ''
-            confirm_popup.dismiss()
+    # ----------------------------------------------------------------- export
+    def export_note(self, title, body):
+        safe = "".join(c if c.isalnum() or c in " -_" else "_" for c in title).strip()
+        safe = (safe or "nota")[:40]
+        out_dir = os.path.join(_user_dir(), "PureNote_export")
+        os.makedirs(out_dir, exist_ok=True)
+        path = os.path.join(out_dir, f"{safe}.md")
+        content = f"# {title}\n\n{body}\n" if title else (body or "")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(content)
+        self._share_or_toast(path, content)
 
-        confirm_popup = Popup(title='Confirm Delete')
-        confirm_layout = BoxLayout(orientation='vertical')
-        confirm_layout.add_widget(Label(text=f'Are you sure you want to delete "{self.note_input.text}"?'))
-        button_layout = BoxLayout(orientation='horizontal')
-        button_layout.add_widget(Button(text='Yes', on_press=delete))
-        button_layout.add_widget(Button(text='Cancel', on_press=confirm_popup.dismiss))
-        confirm_layout.add_widget(button_layout)
-        confirm_popup.content = confirm_layout
-        confirm_popup.open()
+    def export_db(self):
+        import shutil
 
-    def show_saved_notes(self, instance):
-        self.note_popup.open()
+        out_dir = os.path.join(_user_dir(), "PureNote_export")
+        os.makedirs(out_dir, exist_ok=True)
+        stamp = time.strftime("%Y%m%d_%H%M%S")
+        path = os.path.join(out_dir, f"purenote_backup_{stamp}.db")
+        shutil.copyfile(self.store.path, path)
+        self.toast(f"Backup salvato:\n{path}")
 
-if __name__ == '__main__':
-    NoteApp().run()
+    def _share_or_toast(self, path, content):
+        try:
+            from plyer import share  # noqa
+
+            share.share(text=content)
+            return
+        except Exception:
+            pass
+        self.toast(f"Esportato in:\n{path}")
+
+    # ------------------------------------------------------------- ui helpers
+    def toast(self, message):
+        from kivy.uix.popup import Popup
+        from kivy.uix.label import Label
+
+        Popup(
+            title="PureNote",
+            size_hint=(0.85, 0.4),
+            content=Label(text=message, font_name=theme.FONT_MONO),
+        ).open()
+
+    def confirm(self, message, on_yes):
+        from kivy.uix.popup import Popup
+        from kivy.uix.label import Label
+        from kivy.uix.button import Button
+
+        box = BoxLayout(orientation="vertical", spacing=10, padding=10)
+        box.add_widget(Label(text=message, font_name=theme.FONT_MONO))
+        row = BoxLayout(size_hint_y=None, height="48dp", spacing=10)
+        popup = Popup(title="Conferma", content=box, size_hint=(0.85, 0.45))
+
+        def yes(*_):
+            popup.dismiss()
+            on_yes()
+
+        row.add_widget(Button(text="Annulla", on_release=popup.dismiss))
+        row.add_widget(Button(text="Elimina", on_release=yes))
+        box.add_widget(row)
+        popup.open()
+
+    def open_backup_menu(self):
+        from kivy.uix.popup import Popup
+        from kivy.uix.button import Button
+
+        box = BoxLayout(orientation="vertical", spacing=10, padding=10)
+        popup = Popup(title="Backup & Export", content=box, size_hint=(0.85, 0.5))
+
+        def do(fn):
+            popup.dismiss()
+            fn()
+
+        b1 = Button(text="Esporta backup DB", font_name=theme.FONT_TITLE)
+        b1.bind(on_release=lambda *_: do(self.export_db))
+        box.add_widget(b1)
+        b2 = Button(text="Chiudi", font_name=theme.FONT_TITLE)
+        b2.bind(on_release=popup.dismiss)
+        box.add_widget(b2)
+        popup.open()
+
+
+if __name__ == "__main__":
+    PureNoteApp().run()

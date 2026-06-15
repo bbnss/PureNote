@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+*.bak
+*.orig
+notes.db.orig.bak
+PureNote_export/
+.buildozer/
+bin/
+.DS_Store
