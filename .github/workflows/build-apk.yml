@@ -38,26 +38,33 @@ jobs:
           pip install --upgrade buildozer
           pip install "cython==0.29.36"
 
-      - name: Cache buildozer global directory (SDK/NDK)
-        uses: actions/cache@v4
+      # Restore the most recent cache for this spec (SDK/NDK + compiled bundle).
+      # A unique save key per run + prefix restore-keys means progress
+      # accumulates even across failed builds.
+      - name: Restore buildozer cache
+        uses: actions/cache/restore@v4
         with:
-          path: ~/.buildozer
-          key: buildozer-global-v2-${{ hashFiles('buildozer.spec') }}
+          path: |
+            ~/.buildozer
+            .buildozer
+          key: buildozer-v3-${{ hashFiles('buildozer.spec') }}-${{ github.run_id }}
           restore-keys: |
-            buildozer-global-v2-
-
-      - name: Cache buildozer local directory
-        uses: actions/cache@v4
-        with:
-          path: .buildozer
-          key: buildozer-local-v2-${{ hashFiles('buildozer.spec') }}
-          restore-keys: |
-            buildozer-local-v2-
+            buildozer-v3-${{ hashFiles('buildozer.spec') }}-
 
       - name: Build debug APK
         run: buildozer android debug
 
+      - name: Save buildozer cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.buildozer
+            .buildozer
+          key: buildozer-v3-${{ hashFiles('buildozer.spec') }}-${{ github.run_id }}
+
       - name: Upload APK artifact
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: purenote-debug-apk
