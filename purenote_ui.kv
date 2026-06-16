@@ -365,8 +365,13 @@ RootManager:
                     on_text: root.on_text_changed()
                 ScrollView:
                     id: preview_box
-                    size_hint: 1, 1
+                    # full-size only in preview; collapses to 0x0 while editing
+                    # so it cannot intercept touches meant for the body input
+                    size_hint: (1, 1) if root.preview else (None, None)
+                    size: 0, 0
                     pos_hint: {'x': 0, 'y': 0}
+                    opacity: 1 if root.preview else 0
+                    disabled: not root.preview
                     do_scroll_x: False
                     StackLayout:
                         size_hint_y: None

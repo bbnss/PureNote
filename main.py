@@ -180,21 +180,14 @@ class EditorScreen(Screen):
 
     # ---------------------------------------------------------------- actions
     def _set_preview(self, on):
-        """Add/remove the preview pane from the tree.
+        """Toggle preview mode.
 
-        Keeping the preview ScrollView out of the widget tree while editing is
-        the only reliable way to stop it from intercepting touches meant for
-        the body input (a disabled overlay still swallows them on Android).
+        The preview pane stays in the tree but collapses to size 0 while
+        editing (a 0-size widget can't intercept touches meant for the body;
+        a merely-disabled full-size overlay still swallows them on Android).
         """
-        area = self.ids.body_area
-        pv = self.ids.preview_box
         if on:
             self.preview_markup = md.to_markup(self.ids.body.text)
-            if pv.parent is None:
-                area.add_widget(pv)
-        else:
-            if pv.parent is not None:
-                area.remove_widget(pv)
         self.preview = on
 
     def toggle_preview(self):
