@@ -53,6 +53,36 @@
     background_normal: ''
     background_active: ''
 
+<ToolButton>:
+    orientation: 'vertical'
+    spacing: dp(1)
+    padding: [dp(2), dp(6)]
+    canvas.before:
+        Color:
+            rgba: (self.accent[0], self.accent[1], self.accent[2], 0.14 if self.state == 'down' else 0.0)
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [t.RADIUS]
+    Label:
+        text: root.glyph
+        font_name: t.FONT_MONO
+        font_size: '19sp'
+        color: root.accent
+        size_hint_y: None
+        height: dp(24)
+    Label:
+        text: root.label
+        font_name: t.FONT_MONO
+        font_size: '10sp'
+        color: root.accent
+        size_hint_y: None
+        height: dp(14)
+        halign: 'center'
+        valign: 'middle'
+        text_size: self.width, None
+        shorten: True
+
 # ======================================================================== root
 RootManager:
     ListScreen:
@@ -239,6 +269,7 @@ RootManager:
     BoxLayout:
         orientation: 'vertical'
         padding: [0, app.inset_top, 0, app.inset_bottom]
+        # --- title bar: back + screen name + live counter
         TopBar:
             IconButton:
                 accent: t.GREEN
@@ -252,22 +283,52 @@ RootManager:
                 halign: 'left'
                 valign: 'middle'
                 text_size: self.size
-            IconButton:
-                accent: t.AMBER if root.pinned else t.TEXT_DIM
-                text: '*'
-                on_release: root.toggle_pin()
-            IconButton:
-                accent: t.MAGENTA if root.preview else t.TEXT_DIM
-                text: 'o'
-                on_release: root.toggle_preview()
-            IconButton:
+            Label:
+                text: root.counts
+                font_name: t.FONT_MONO
+                font_size: t.FS_META
+                color: t.TEXT_DIM
+                halign: 'right'
+                valign: 'middle'
+                text_size: self.size
+        # --- action bar: clear icon + label buttons
+        BoxLayout:
+            size_hint_y: None
+            height: dp(52)
+            padding: [dp(6), dp(2)]
+            spacing: dp(4)
+            canvas.before:
+                Color:
+                    rgba: t.BG_PANEL
+                Rectangle:
+                    pos: self.pos
+                    size: self.size
+            ToolButton:
+                glyph: 'v'
+                label: 'Salva'
                 accent: t.GREEN
-                text: '^'
+                on_release: root.manual_save()
+            ToolButton:
+                glyph: '*'
+                label: 'Fissa'
+                accent: t.AMBER if root.pinned else t.TEXT_DIM
+                on_release: root.toggle_pin()
+            ToolButton:
+                glyph: 'o'
+                label: 'Modifica' if root.preview else 'Anteprima'
+                accent: t.MAGENTA if root.preview else t.TEXT_DIM
+                on_release: root.toggle_preview()
+            ToolButton:
+                glyph: '^'
+                label: 'Condividi'
+                accent: t.GREEN
                 on_release: root.export()
-            IconButton:
+            ToolButton:
+                glyph: 'x'
+                label: 'Elimina'
                 accent: t.DANGER
-                text: 'x'
                 on_release: root.delete()
+        # --- inputs
         BoxLayout:
             orientation: 'vertical'
             padding: [dp(12), dp(8)]
@@ -280,6 +341,7 @@ RootManager:
                 multiline: False
                 size_hint_y: None
                 height: dp(48)
+                on_text: root.on_text_changed()
             RetroInput:
                 id: tags
                 hint_text: 'tag separati da virgola'
@@ -287,52 +349,38 @@ RootManager:
                 multiline: False
                 size_hint_y: None
                 height: dp(38)
-            # body / preview swap
-            RetroInput:
-                id: body
-                hint_text: 'scrivi... (markdown supportato)'
-                font_size: t.FS_BODY
-                opacity: 0 if root.preview else 1
-                disabled: root.preview
-                size_hint_y: 0 if root.preview else 1
-                on_text: root.update_counts()
-            ScrollView:
-                opacity: 1 if root.preview else 0
-                size_hint_y: 1 if root.preview else None
-                height: 0
-                do_scroll_x: False
-                StackLayout:
-                    size_hint_y: None
-                    height: self.minimum_height
-                    Label:
-                        text: root.preview_markup
-                        markup: True
-                        font_name: t.FONT_MONO
-                        font_size: t.FS_BODY
-                        color: t.TEXT
-                        halign: 'left'
-                        valign: 'top'
-                        size_hint_x: 1
+                on_text: root.on_text_changed()
+            # body / preview live in one cell; the inactive one is disabled
+            # (disabled widgets don't receive touches) so there is no overlap.
+            FloatLayout:
+                RetroInput:
+                    id: body
+                    hint_text: 'scrivi... (markdown supportato)'
+                    font_size: t.FS_BODY
+                    size_hint: 1, 1
+                    pos_hint: {'x': 0, 'y': 0}
+                    opacity: 0 if root.preview else 1
+                    disabled: root.preview
+                    on_text: root.on_text_changed()
+                ScrollView:
+                    size_hint: 1, 1
+                    pos_hint: {'x': 0, 'y': 0}
+                    opacity: 1 if root.preview else 0
+                    disabled: not root.preview
+                    do_scroll_x: False
+                    StackLayout:
                         size_hint_y: None
-                        height: self.texture_size[1]
-                        text_size: self.width, None
-                        padding: [dp(6), dp(6)]
-        BoxLayout:
-            size_hint_y: None
-            height: dp(54)
-            padding: [dp(12), dp(4)]
-            spacing: dp(10)
-            Label:
-                text: root.counts
-                font_name: t.FONT_MONO
-                font_size: t.FS_META
-                color: t.TEXT_DIM
-                halign: 'left'
-                valign: 'middle'
-                text_size: self.size
-            RetroButton:
-                text: 'SALVA'
-                accent: t.GREEN
-                size_hint_x: None
-                width: dp(120)
-                on_release: root.save()
+                        height: self.minimum_height
+                        Label:
+                            text: root.preview_markup
+                            markup: True
+                            font_name: t.FONT_MONO
+                            font_size: t.FS_BODY
+                            color: t.TEXT
+                            halign: 'left'
+                            valign: 'top'
+                            size_hint_x: 1
+                            size_hint_y: None
+                            height: self.texture_size[1]
+                            text_size: self.width, None
+                            padding: [dp(6), dp(6)]

@@ -72,6 +72,13 @@ class RetroInput(TextInput):
     pass
 
 
+class ToolButton(ButtonBehavior, BoxLayout):
+    """Toolbar button rendered as an icon glyph over a small text label."""
+    glyph = StringProperty()
+    label = StringProperty()
+    accent = ColorProperty(theme.GREEN)
+
+
 # ---------------------------------------------------------------- list screen
 class NoteCard(ButtonBehavior, BoxLayout):
     note_id = NumericProperty(0)
@@ -110,8 +117,10 @@ class EditorScreen(Screen):
     pinned = BooleanProperty(False)
     counts = StringProperty("")
     preview_markup = StringProperty("")
+    _loading = False
 
     def load(self, note_id):
+        self._loading = True
         self.note_id = note_id or 0
         self.preview = False
         app = App.get_running_app()
@@ -127,22 +136,25 @@ class EditorScreen(Screen):
             self.ids.tags.text = ""
             self.pinned = False
         self.update_counts()
+        self._loading = False
+
+    # ------------------------------------------------------------- text/save
+    def on_text_changed(self):
+        """Bound to every input's on_text: refresh counts and debounce save."""
+        self.update_counts()
+        if not self._loading:
+            Clock.unschedule(self._autosave)
+            Clock.schedule_once(self._autosave, 1.0)
+
+    def _autosave(self, *_):
+        self._persist()
 
     def update_counts(self, *_):
         body = self.ids.body.text
-        chars = len(body)
-        words = len(body.split())
-        self.counts = f"{words} parole / {chars} caratteri"
+        self.counts = f"{len(body.split())} par · {len(body)} car"
 
-    def toggle_preview(self):
-        if not self.preview:
-            self.preview_markup = md.to_markup(self.ids.body.text)
-        self.preview = not self.preview
-
-    def toggle_pin(self):
-        self.pinned = not self.pinned
-
-    def save(self):
+    def _persist(self):
+        """Write the note to the DB without navigating. Returns True if saved."""
         app = App.get_running_app()
         title = self.ids.title.text.strip()
         body = self.ids.body.text
@@ -150,33 +162,52 @@ class EditorScreen(Screen):
             t.strip() for t in self.ids.tags.text.split(",") if t.strip()
         )
         if not title and not body.strip():
-            app.go_list()
-            return
+            return False
         if not title:
             title = NoteStore._title_from_body(body)
         if self.note_id:
             app.store.update(self.note_id, title, body, tags, self.pinned)
         else:
             self.note_id = app.store.add(title, body, tags, self.pinned)
-        app.go_list()
+        return True
+
+    def manual_save(self):
+        Clock.unschedule(self._autosave)
+        if self._persist():
+            App.get_running_app().flash("Salvato")
+        else:
+            App.get_running_app().flash("Nota vuota")
+
+    # ---------------------------------------------------------------- actions
+    def toggle_preview(self):
+        if not self.preview:
+            self.preview_markup = md.to_markup(self.ids.body.text)
+        self.preview = not self.preview
+
+    def toggle_pin(self):
+        self.pinned = not self.pinned
+        if self.note_id:
+            self._persist()
 
     def delete(self):
         app = App.get_running_app()
+        Clock.unschedule(self._autosave)
         if self.note_id:
             app.confirm(
                 f'Eliminare "{self.ids.title.text or "questa nota"}"?',
                 self._do_delete,
             )
         else:
-            app.go_list()
+            app.go_list(save=False)
 
     def _do_delete(self):
         app = App.get_running_app()
         app.store.delete(self.note_id)
-        app.go_list()
+        self.note_id = 0
+        app.go_list(save=False)
 
     def export(self):
-        App.get_running_app().export_note(
+        App.get_running_app().share_note(
             self.ids.title.text, self.ids.body.text
         )
 
@@ -211,8 +242,18 @@ class PureNoteApp(App):
         root = Builder.load_file(
             os.path.join(os.path.dirname(__file__), "purenote_ui.kv")
         )
+        Window.bind(on_keyboard=self._on_key)
         Clock.schedule_once(lambda *_: self.refresh_list(), 0)
         return root
+
+    def _on_key(self, window, key, *args):
+        # Android back / Esc: from the editor, save and return to the list
+        # (consume the event); from the list, let it close the app.
+        if key == 27:
+            if self.sm.current == "editor":
+                self.go_list()
+                return True
+        return False
 
     def _read_android_insets(self):
         """Read system bar heights (px) so content clears the status/nav bars.
@@ -250,7 +291,11 @@ class PureNoteApp(App):
     def new_note(self):
         self.open_editor(0)
 
-    def go_list(self):
+    def go_list(self, save=True):
+        editor = self.sm.get_screen("editor")
+        Clock.unschedule(editor._autosave)
+        if save:
+            editor._persist()
         self.sm.transition = SlideTransition(direction="right")
         self.sm.current = "list"
         self.refresh_list()
@@ -290,8 +335,40 @@ class PureNoteApp(App):
         ls.ids.tagscroll.opacity = 1 if tags else 0
         ls.ids.tagscroll.height = "36dp" if tags else 0
 
-    # ----------------------------------------------------------------- export
-    def export_note(self, title, body):
+    # --------------------------------------------------------- share / export
+    def share_note(self, title, body):
+        """Open the native Android share sheet with the note as plain text."""
+        text = (f"{title}\n\n{body}".strip() if title else (body or "")).strip()
+        if not text:
+            self.flash("Nota vuota")
+            return
+        try:
+            from jnius import autoclass, cast
+
+            Intent = autoclass("android.content.Intent")
+            String = autoclass("java.lang.String")
+            activity = autoclass("org.kivy.android.PythonActivity").mActivity
+
+            intent = Intent()
+            intent.setAction(Intent.ACTION_SEND)
+            intent.setType("text/plain")
+            intent.putExtra(
+                Intent.EXTRA_TEXT, cast("java.lang.CharSequence", String(text))
+            )
+            if title:
+                intent.putExtra(
+                    Intent.EXTRA_SUBJECT,
+                    cast("java.lang.CharSequence", String(title)),
+                )
+            chooser = Intent.createChooser(
+                intent, cast("java.lang.CharSequence", String("Condividi nota"))
+            )
+            activity.startActivity(chooser)
+        except Exception:
+            # Desktop fallback: write a .md file and report where.
+            self._export_note_file(title, body)
+
+    def _export_note_file(self, title, body):
         safe = "".join(c if c.isalnum() or c in " -_" else "_" for c in title).strip()
         safe = (safe or "nota")[:40]
         out_dir = os.path.join(_user_dir(), "PureNote_export")
@@ -300,7 +377,7 @@ class PureNoteApp(App):
         content = f"# {title}\n\n{body}\n" if title else (body or "")
         with open(path, "w", encoding="utf-8") as f:
             f.write(content)
-        self._share_or_toast(path, content)
+        self.toast(f"Esportato in:\n{path}")
 
     def export_db(self):
         import shutil
@@ -312,26 +389,39 @@ class PureNoteApp(App):
         shutil.copyfile(self.store.path, path)
         self.toast(f"Backup salvato:\n{path}")
 
-    def _share_or_toast(self, path, content):
-        try:
-            from plyer import share  # noqa
-
-            share.share(text=content)
-            return
-        except Exception:
-            pass
-        self.toast(f"Esportato in:\n{path}")
-
     # ------------------------------------------------------------- ui helpers
+    def flash(self, message):
+        """Brief, non-blocking confirmation that fades out."""
+        from kivy.uix.label import Label
+        from kivy.animation import Animation
+
+        lbl = Label(
+            text=message,
+            font_name=theme.FONT_TITLE,
+            font_size=theme.FS_BTN,
+            color=(theme.GREEN[0], theme.GREEN[1], theme.GREEN[2], 1),
+            size_hint=(None, None),
+            size=(Window.width, "40dp"),
+        )
+        lbl.center_x = Window.width / 2
+        lbl.y = Window.height * 0.12 + self.inset_bottom
+        Window.add_widget(lbl)
+        anim = Animation(opacity=0, duration=1.3, t="in_quad")
+        anim.bind(on_complete=lambda *a: Window.remove_widget(lbl))
+        anim.start(lbl)
+
     def toast(self, message):
         from kivy.uix.popup import Popup
         from kivy.uix.label import Label
 
-        Popup(
-            title="PureNote",
-            size_hint=(0.85, 0.4),
-            content=Label(text=message, font_name=theme.FONT_MONO),
-        ).open()
+        content = Label(
+            text=message,
+            font_name=theme.FONT_MONO,
+            halign="center",
+            valign="middle",
+        )
+        content.bind(size=lambda lbl, s: setattr(lbl, "text_size", s))
+        Popup(title="PureNote", size_hint=(0.85, 0.4), content=content).open()
 
     def confirm(self, message, on_yes):
         from kivy.uix.popup import Popup

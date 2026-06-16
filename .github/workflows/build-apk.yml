@@ -41,11 +41,15 @@ jobs:
       # Restore the most recent cache for this spec (SDK/NDK + compiled bundle).
       # A unique save key per run + prefix restore-keys means progress
       # accumulates even across failed builds.
+      # ~/.android holds the debug.keystore: persisting it keeps the signing
+      # key stable across builds, so new debug APKs install over the previous
+      # one without "signatures do not match" / uninstall.
       - name: Restore buildozer cache
         uses: actions/cache/restore@v4
         with:
           path: |
             ~/.buildozer
+            ~/.android
             .buildozer
           key: buildozer-v3-${{ hashFiles('buildozer.spec') }}-${{ github.run_id }}
           restore-keys: |
@@ -60,6 +64,7 @@ jobs:
         with:
           path: |
             ~/.buildozer
+            ~/.android
             .buildozer
           key: buildozer-v3-${{ hashFiles('buildozer.spec') }}-${{ github.run_id }}
 
