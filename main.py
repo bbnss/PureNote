@@ -122,7 +122,7 @@ class EditorScreen(Screen):
     def load(self, note_id):
         self._loading = True
         self.note_id = note_id or 0
-        self.preview = False
+        self._set_preview(False)
         app = App.get_running_app()
         if note_id:
             n = app.store.get(note_id)
@@ -151,7 +151,7 @@ class EditorScreen(Screen):
 
     def update_counts(self, *_):
         body = self.ids.body.text
-        self.counts = f"{len(body.split())} par · {len(body)} car"
+        self.counts = f"{len(body.split())} par / {len(body)} car"
 
     def _persist(self):
         """Write the note to the DB without navigating. Returns True if saved."""
@@ -179,10 +179,26 @@ class EditorScreen(Screen):
             App.get_running_app().flash("Nota vuota")
 
     # ---------------------------------------------------------------- actions
-    def toggle_preview(self):
-        if not self.preview:
+    def _set_preview(self, on):
+        """Add/remove the preview pane from the tree.
+
+        Keeping the preview ScrollView out of the widget tree while editing is
+        the only reliable way to stop it from intercepting touches meant for
+        the body input (a disabled overlay still swallows them on Android).
+        """
+        area = self.ids.body_area
+        pv = self.ids.preview_box
+        if on:
             self.preview_markup = md.to_markup(self.ids.body.text)
-        self.preview = not self.preview
+            if pv.parent is None:
+                area.add_widget(pv)
+        else:
+            if pv.parent is not None:
+                area.remove_widget(pv)
+        self.preview = on
+
+    def toggle_preview(self):
+        self._set_preview(not self.preview)
 
     def toggle_pin(self):
         self.pinned = not self.pinned

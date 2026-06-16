@@ -353,6 +353,7 @@ RootManager:
             # body / preview live in one cell; the inactive one is disabled
             # (disabled widgets don't receive touches) so there is no overlap.
             FloatLayout:
+                id: body_area
                 RetroInput:
                     id: body
                     hint_text: 'scrivi... (markdown supportato)'
@@ -363,10 +364,9 @@ RootManager:
                     disabled: root.preview
                     on_text: root.on_text_changed()
                 ScrollView:
+                    id: preview_box
                     size_hint: 1, 1
                     pos_hint: {'x': 0, 'y': 0}
-                    opacity: 1 if root.preview else 0
-                    disabled: not root.preview
                     do_scroll_x: False
                     StackLayout:
                         size_hint_y: None
