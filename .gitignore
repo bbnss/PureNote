@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 *.bak
 *.orig
+notes.db
 notes.db.orig.bak
 PureNote_export/
 .buildozer/

@@ -13,7 +13,8 @@ package.domain = bbnss.test
 source.dir = .
 
 # (list) Source files to include (let empty to include all the files)
-source.include_exts = py,png,jpg,ttf,kv,db
+# No `db`: the notes database is created/seeded at runtime, never shipped.
+source.include_exts = py,png,jpg,ttf,kv
 
 # (list) Source files to exclude
 source.exclude_exts = bak,orig
@@ -63,6 +64,12 @@ android.archs = arm64-v8a
 
 # (bool) enables Android auto backup feature (Android API >= 23)
 android.allow_backup = True
+
+# (str) Format used to package the app for release mode (aab for the Play Store).
+android.release_artifact = aab
+
+# (str) Format used to package the app for debug mode (apk for sideloading).
+android.debug_artifact = apk
 
 [buildozer]
 

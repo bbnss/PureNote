@@ -5,7 +5,9 @@ A retro/CRT note-taking app for Android, built with Python and Kivy. 100% local 
 - Multi-note with titles, tags and creation/modification dates
 - Live search across titles and bodies
 - Tag filtering
-- Markdown editor with live preview (headings, bold, italic, code, bullet & checklists)
+- Markdown editor with live preview (headings, bold, italic, code, bullets)
+- Interactive checklists: tap `- [ ]` items in the preview to tick them
+- Trash with undo: deleted notes are recoverable, with an undo action and a trash bin (restore / empty)
 - Pin important notes to the top
 - Word / character counter
 - Export a note as Markdown and full database backup

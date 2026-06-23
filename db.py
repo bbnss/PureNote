@@ -42,10 +42,20 @@ class NoteStore:
             )"""
         )
         self.conn.commit()
+        self._ensure_columns()
         self._migrate_legacy()
 
     def _table_columns(self, table):
         return [r[1] for r in self.conn.execute(f"PRAGMA table_info({table})")]
+
+    def _ensure_columns(self):
+        """Add columns introduced after the first v2 schema (idempotent)."""
+        cols = self._table_columns("notes")
+        if "trashed" not in cols:
+            self.conn.execute(
+                "ALTER TABLE notes ADD COLUMN trashed INTEGER NOT NULL DEFAULT 0"
+            )
+            self.conn.commit()
 
     def _stash_legacy_table(self):
         cols = self._table_columns("notes")
@@ -104,18 +114,46 @@ class NoteStore:
         )
         self.conn.commit()
 
+    def trash(self, note_id):
+        """Soft-delete: move a note to the trash (recoverable)."""
+        self.conn.execute(
+            "UPDATE notes SET trashed=1, updated_at=? WHERE id=?",
+            (_now(), note_id),
+        )
+        self.conn.commit()
+
+    def restore(self, note_id):
+        self.conn.execute(
+            "UPDATE notes SET trashed=0, updated_at=? WHERE id=?",
+            (_now(), note_id),
+        )
+        self.conn.commit()
+
     def delete(self, note_id):
+        """Permanently remove a note."""
         self.conn.execute("DELETE FROM notes WHERE id=?", (note_id,))
         self.conn.commit()
+
+    def empty_trash(self):
+        self.conn.execute("DELETE FROM notes WHERE trashed=1")
+        self.conn.commit()
+
+    def count_trashed(self):
+        return self.conn.execute(
+            "SELECT COUNT(*) FROM notes WHERE trashed=1"
+        ).fetchone()[0]
+
+    def is_empty(self):
+        return self.conn.execute("SELECT COUNT(*) FROM notes").fetchone()[0] == 0
 
     def get(self, note_id):
         row = self.conn.execute("SELECT * FROM notes WHERE id=?", (note_id,)).fetchone()
         return dict(row) if row else None
 
     # ----------------------------------------------------------------- queries
-    def list(self, query="", tag=""):
-        sql = "SELECT * FROM notes"
-        clauses, params = [], []
+    def list(self, query="", tag="", trashed=0):
+        clauses = ["trashed = ?"]
+        params = [int(trashed)]
         if query:
             clauses.append("(title LIKE ? OR body LIKE ?)")
             like = f"%{query}%"
@@ -123,14 +161,15 @@ class NoteStore:
         if tag:
             clauses.append("(',' || replace(tags,' ','') || ',') LIKE ?")
             params.append(f"%,{tag},%")
-        if clauses:
-            sql += " WHERE " + " AND ".join(clauses)
+        sql = "SELECT * FROM notes WHERE " + " AND ".join(clauses)
         sql += " ORDER BY pinned DESC, updated_at DESC"
         return [dict(r) for r in self.conn.execute(sql, params).fetchall()]
 
     def all_tags(self):
         tags = set()
-        for (raw,) in self.conn.execute("SELECT tags FROM notes WHERE tags != ''"):
+        for (raw,) in self.conn.execute(
+            "SELECT tags FROM notes WHERE tags != '' AND trashed = 0"
+        ):
             for t in raw.split(","):
                 t = t.strip()
                 if t:

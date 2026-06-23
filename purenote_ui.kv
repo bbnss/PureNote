@@ -83,6 +83,85 @@
         text_size: self.width, None
         shorten: True
 
+<PreviewLabel@Label>:
+    markup: True
+    font_name: t.FONT_MONO
+    font_size: t.FS_BODY
+    color: t.TEXT
+    halign: 'left'
+    valign: 'top'
+    size_hint_y: None
+    text_size: self.width, None
+    height: self.texture_size[1]
+    padding: [dp(6), dp(2)]
+
+<CheckRow>:
+    orientation: 'horizontal'
+    size_hint_y: None
+    height: max(dp(30), lbl.texture_size[1] + dp(10))
+    padding: [dp(6), dp(2)]
+    spacing: dp(6)
+    canvas.before:
+        Color:
+            rgba: (t.GREEN[0], t.GREEN[1], t.GREEN[2], 0.12 if self.state == 'down' else 0.0)
+        Rectangle:
+            pos: self.pos
+            size: self.size
+    Label:
+        text: '[x]' if root.checked else '[ ]'
+        font_name: t.FONT_MONO
+        font_size: t.FS_BODY
+        color: t.GREEN if root.checked else t.TEXT_DIM
+        size_hint_x: None
+        width: dp(36)
+        halign: 'left'
+        valign: 'top'
+        text_size: self.width, None
+    Label:
+        id: lbl
+        text: root.label_markup
+        markup: True
+        font_name: t.FONT_MONO
+        font_size: t.FS_BODY
+        color: t.TEXT
+        halign: 'left'
+        valign: 'top'
+        size_hint_y: None
+        text_size: self.width, None
+        height: self.texture_size[1]
+
+<UndoBar>:
+    size_hint: None, None
+    height: dp(48)
+    padding: [dp(12), dp(4)]
+    spacing: dp(8)
+    canvas.before:
+        Color:
+            rgba: t.BG_PANEL
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [t.RADIUS]
+        Color:
+            rgba: t.GREEN
+        Line:
+            rounded_rectangle: (self.x, self.y, self.width, self.height, t.RADIUS)
+            width: 1.1
+    Label:
+        text: root.msg
+        font_name: t.FONT_MONO
+        font_size: t.FS_META
+        color: t.TEXT
+        halign: 'left'
+        valign: 'middle'
+        text_size: self.size
+    GhostButton:
+        text: 'ANNULLA'
+        accent: t.AMBER
+        size_hint_x: None
+        width: dp(100)
+        on_release: root.on_undo()
+
 # ======================================================================== root
 RootManager:
     ListScreen:
@@ -373,19 +452,10 @@ RootManager:
                     opacity: 1 if root.preview else 0
                     disabled: not root.preview
                     do_scroll_x: False
-                    StackLayout:
+                    BoxLayout:
+                        id: preview_col
+                        orientation: 'vertical'
                         size_hint_y: None
                         height: self.minimum_height
-                        Label:
-                            text: root.preview_markup
-                            markup: True
-                            font_name: t.FONT_MONO
-                            font_size: t.FS_BODY
-                            color: t.TEXT
-                            halign: 'left'
-                            valign: 'top'
-                            size_hint_x: 1
-                            size_hint_y: None
-                            height: self.texture_size[1]
-                            text_size: self.width, None
-                            padding: [dp(6), dp(6)]
+                        padding: [dp(6), dp(6)]
+                        spacing: dp(2)

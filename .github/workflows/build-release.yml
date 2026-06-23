@@ -1,0 +1,102 @@
+name: Build PureNote Release AAB
+
+# Signed Android App Bundle for the Play Store.
+# Triggered manually or by pushing a version tag (e.g. v2.1).
+# Requires these repo secrets for a SIGNED bundle (otherwise the AAB is
+# unsigned and only good for validating the build):
+#   ANDROID_KEYSTORE_B64       base64 of the upload keystore (.keystore/.jks)
+#   ANDROID_KEYSTORE_PASSWORD  keystore (store) password
+#   ANDROID_KEY_ALIAS          key alias inside the keystore
+#   ANDROID_KEY_PASSWORD       password for that alias
+# See RELEASE.md for how to generate the keystore and set the secrets.
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build-release:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            git zip unzip openjdk-17-jdk python3-pip autoconf libtool \
+            pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev \
+            libtinfo5 cmake libffi-dev libssl-dev build-essential \
+            ccache libltdl-dev
+
+      - name: Install buildozer
+        run: |
+          python -m pip install --upgrade pip
+          pip install --upgrade buildozer
+          pip install "cython==0.29.36"
+
+      # Reuse the SDK/NDK that the debug workflow already downloaded
+      # (same buildozer-v3 prefix); the release adds armeabi-v7a on top.
+      - name: Restore buildozer cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.buildozer
+            ~/.android
+            .buildozer
+          key: buildozer-release-v1-${{ hashFiles('buildozer.spec') }}-${{ github.run_id }}
+          restore-keys: |
+            buildozer-release-v1-${{ hashFiles('buildozer.spec') }}-
+            buildozer-v3-${{ hashFiles('buildozer.spec') }}-
+
+      - name: Build release AAB
+        env:
+          ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          # Release ships both ABIs (Play serves the right one per device).
+          sed -i 's/^android.archs = .*/android.archs = arm64-v8a,armeabi-v7a/' buildozer.spec
+          if [ -n "$ANDROID_KEYSTORE_B64" ]; then
+            echo "$ANDROID_KEYSTORE_B64" | base64 -d > "$HOME/release.keystore"
+            export P4A_RELEASE_KEYSTORE="$HOME/release.keystore"
+            export P4A_RELEASE_KEYSTORE_PASSWD="$ANDROID_KEYSTORE_PASSWORD"
+            export P4A_RELEASE_KEYALIAS="$ANDROID_KEY_ALIAS"
+            export P4A_RELEASE_KEYALIAS_PASSWD="$ANDROID_KEY_PASSWORD"
+            echo "Keystore present -> building a SIGNED release AAB"
+          else
+            echo "::warning::No ANDROID_KEYSTORE_B64 secret set — building an UNSIGNED AAB (not uploadable to Play)."
+          fi
+          buildozer android release
+
+      - name: Save buildozer cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.buildozer
+            ~/.android
+            .buildozer
+          key: buildozer-release-v1-${{ hashFiles('buildozer.spec') }}-${{ github.run_id }}
+
+      - name: Upload AAB artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: purenote-release-aab
+          path: bin/*.aab
+          if-no-files-found: error
