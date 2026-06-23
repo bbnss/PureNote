@@ -20,8 +20,12 @@ source.include_exts = py,png,jpg,ttf,kv
 source.exclude_exts = bak,orig
 source.exclude_dirs = .venv,images,__pycache__,PureNote_export
 
-# (str) Application versioning
+# (str) Application versioning (versionName shown to users)
 version = 2.0
+
+# (int) Version code: Play Store requires it to strictly increase every upload.
+# Previous published versionCode was 10214, so this must stay > 10214.
+android.numeric_version = 10215
 
 # (list) Application requirements
 requirements = python3,kivy==2.3.1,plyer
