@@ -32,3 +32,15 @@ runs:
           purenote-android-v4-${{ runner.os }}-${{ hashFiles('buildozer.spec', 'requirements-build.txt') }}-
           purenote-android-v4-${{ runner.os }}-
           buildozer-v3-
+    - name: Recreate disposable p4a installer environments
+      shell: bash
+      run: |
+        python - <<'PY'
+        import shutil
+        from pathlib import Path
+
+        # Re-running venv over a cached, upgraded pip can leave mixed pip files.
+        # Keep compiled recipes; only discard the pure-Python installer venv.
+        for environment in Path('.buildozer/android/platform').glob('build-*/build/venv'):
+            shutil.rmtree(environment)
+        PY
