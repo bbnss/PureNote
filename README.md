@@ -63,15 +63,16 @@ inset verifica il layout ridotto: non sostituisce una prova della tastiera Andro
 ## APK su GitHub
 
 Il workflow **Build PureNote APK** esegue test della logica, lint e prova UI, poi
-compila con Buildozer su Ubuntu. Parte su push, pull request oppure manualmente
+compila con Buildozer su Ubuntu e verifica firma e assenza di permessi nell’APK.
+Parte su push, pull request oppure manualmente
 in **Actions → Build PureNote APK → Run workflow**. Scarica `purenote-debug-apk`
 negli artifact della run; sono disponibili anche log e anteprime dell’interfaccia.
 
 La toolchain è fissata in `requirements-build.txt` e `buildozer.spec`:
 Buildozer 1.6.0, Kivy 2.3.1, python-for-android v2026.05.09 (commit esatto),
-SDK 36, NDK 28c e Android minimo 7.0 (API 24). La prima compilazione con questa
-configurazione deve essere validata su GitHub; i test locali non dimostrano che
-l’APK compili o funzioni su dispositivo.
+SDK 36, NDK 28c e Android minimo 7.0 (API 24). Gli esiti della compilazione sono
+disponibili nelle run del workflow; i test locali non sostituiscono la build
+Android e la prova su dispositivo.
 
 `constraints-android.txt` mantiene lo stesso vincolo sulle dipendenze sia nel
 risolutore Android sia nell’installazione dei moduli Python.

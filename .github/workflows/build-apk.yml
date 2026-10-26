@@ -34,6 +34,8 @@ jobs:
       - name: Build debug APK
         shell: bash
         run: buildozer -v android debug 2>&1 | tee build.log
+      - name: Verify APK signature and permissions
+        run: python tests/verify_apk.py bin/*.apk
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:

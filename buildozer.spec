@@ -18,7 +18,7 @@ fullscreen = 0
 
 android.accept_sdk_license = True
 # Notes are private. File access is granted by the system document picker.
-android.permissions =
+# Omit android.permissions entirely: an empty value becomes android.permission.
 android.api = 36
 android.minapi = 24
 android.ndk = 28c
