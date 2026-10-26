@@ -1,461 +1,240 @@
 #:import t theme
 #:import dp kivy.metrics.dp
+#:import sp kivy.metrics.sp
+#:import NoTransition kivy.uix.screenmanager.NoTransition
 
-# ====================================================================== widgets
-<RetroButton>:
-    font_name: t.FONT_TITLE
-    font_size: t.FS_BTN
-    color: t.TEXT_INV
+<QuietButton>:
+    font_name: t.FONT_BODY
+    font_size: '15sp'
+    color: t.BG if self.primary else (t.DANGER if self.danger else t.ACCENT)
+    disabled_color: t.MUTED
     size_hint_y: None
-    height: dp(46)
+    height: dp(48)
+    text_size: self.width - dp(12), self.height
+    halign: 'center'
+    valign: 'middle'
+    shorten: True
     canvas.before:
         Color:
-            rgba: self.accent if self.state == 'normal' else (self.accent[0], self.accent[1], self.accent[2], 0.7)
+            rgba: t.ACCENT if self.primary else (t.LINE if self.state == 'down' else t.PANEL)
         RoundedRectangle:
             pos: self.pos
             size: self.size
-            radius: [t.RADIUS]
+            radius: [dp(10)]
 
-<GhostButton>:
-    font_name: t.FONT_TITLE
-    font_size: t.FS_BTN
-    color: self.accent
-    size_hint_y: None
-    height: dp(46)
-    canvas.before:
-        Color:
-            rgba: (self.accent[0], self.accent[1], self.accent[2], 0.12 if self.state == 'down' else 0.0)
-        RoundedRectangle:
-            pos: self.pos
-            size: self.size
-            radius: [t.RADIUS]
-        Color:
-            rgba: self.accent
-        Line:
-            rounded_rectangle: (self.x, self.y, self.width, self.height, t.RADIUS)
-            width: 1.1
-
-<IconButton>:
-    font_name: t.FONT_MONO
-    font_size: '20sp'
-    color: self.accent if self.state == 'normal' else t.TEXT
-    size_hint: None, None
-    size: dp(44), dp(44)
-
-<RetroInput>:
-    background_color: t.BG_INPUT
-    foreground_color: t.TEXT
-    cursor_color: t.GREEN
-    selection_color: (t.GREEN[0], t.GREEN[1], t.GREEN[2], 0.3)
-    hint_text_color: t.TEXT_DIM
-    font_name: t.FONT_MONO
-    padding: [dp(10), dp(10)]
+<NoteInput>:
     background_normal: ''
     background_active: ''
+    background_color: t.BG
+    foreground_color: t.TEXT
+    hint_text_color: t.MUTED
+    cursor_color: t.ACCENT
+    selection_color: (0.3, 0.6, 0.4, 0.35)
+    font_name: t.FONT_BODY
+    font_size: '18sp'
+    padding: [dp(20), dp(16)]
+    write_tab: False
 
-<ToolButton>:
-    orientation: 'vertical'
-    spacing: dp(1)
-    padding: [dp(2), dp(6)]
-    canvas.before:
-        Color:
-            rgba: (self.accent[0], self.accent[1], self.accent[2], 0.14 if self.state == 'down' else 0.0)
-        RoundedRectangle:
-            pos: self.pos
-            size: self.size
-            radius: [t.RADIUS]
-    Label:
-        text: root.glyph
-        font_name: t.FONT_MONO
-        font_size: '19sp'
-        color: root.accent
-        size_hint_y: None
-        height: dp(24)
-    Label:
-        text: root.label
-        font_name: t.FONT_MONO
-        font_size: '10sp'
-        color: root.accent
-        size_hint_y: None
-        height: dp(14)
-        halign: 'center'
-        valign: 'middle'
-        text_size: self.width, None
-        shorten: True
-
-<PreviewLabel@Label>:
-    markup: True
+<QuietLabel@Label>:
     font_name: t.FONT_MONO
-    font_size: t.FS_BODY
-    color: t.TEXT
+    font_size: '11sp'
+    color: t.MUTED
     halign: 'left'
-    valign: 'top'
-    size_hint_y: None
-    text_size: self.width, None
-    height: self.texture_size[1]
-    padding: [dp(6), dp(2)]
+    valign: 'middle'
+    text_size: self.size
 
-<CheckRow>:
-    orientation: 'horizontal'
-    size_hint_y: None
-    height: max(dp(30), lbl.texture_size[1] + dp(10))
-    padding: [dp(6), dp(2)]
-    spacing: dp(6)
-    canvas.before:
-        Color:
-            rgba: (t.GREEN[0], t.GREEN[1], t.GREEN[2], 0.12 if self.state == 'down' else 0.0)
-        Rectangle:
-            pos: self.pos
-            size: self.size
-    Label:
-        text: '[x]' if root.checked else '[ ]'
-        font_name: t.FONT_MONO
-        font_size: t.FS_BODY
-        color: t.GREEN if root.checked else t.TEXT_DIM
-        size_hint_x: None
-        width: dp(36)
-        halign: 'left'
-        valign: 'top'
-        text_size: self.width, None
-    Label:
-        id: lbl
-        text: root.label_markup
-        markup: True
-        font_name: t.FONT_MONO
-        font_size: t.FS_BODY
-        color: t.TEXT
-        halign: 'left'
-        valign: 'top'
-        size_hint_y: None
-        text_size: self.width, None
-        height: self.texture_size[1]
-
-<UndoBar>:
-    size_hint: None, None
-    height: dp(48)
-    padding: [dp(12), dp(4)]
-    spacing: dp(8)
-    canvas.before:
-        Color:
-            rgba: t.BG_PANEL
-        RoundedRectangle:
-            pos: self.pos
-            size: self.size
-            radius: [t.RADIUS]
-        Color:
-            rgba: t.GREEN
-        Line:
-            rounded_rectangle: (self.x, self.y, self.width, self.height, t.RADIUS)
-            width: 1.1
-    Label:
-        text: root.msg
-        font_name: t.FONT_MONO
-        font_size: t.FS_META
-        color: t.TEXT
-        halign: 'left'
-        valign: 'middle'
-        text_size: self.size
-    GhostButton:
-        text: 'ANNULLA'
-        accent: t.AMBER
-        size_hint_x: None
-        width: dp(100)
-        on_release: root.on_undo()
-
-# ======================================================================== root
-RootManager:
-    ListScreen:
-        name: 'list'
-    EditorScreen:
-        name: 'editor'
-
-# ==================================================================== top bars
 <TopBar@BoxLayout>:
     size_hint_y: None
-    height: dp(58)
-    padding: [dp(12), dp(6)]
+    height: dp(72)
+    padding: [dp(16), dp(12)]
     spacing: dp(8)
-    canvas.before:
-        Color:
-            rgba: t.BG_PANEL
-        Rectangle:
-            pos: self.pos
-            size: self.size
-        Color:
-            rgba: t.GREEN
-        Rectangle:
-            pos: self.x, self.y
-            size: self.width, dp(1.5)
 
-# ==================================================================== note card
-<NoteCard>:
-    orientation: 'horizontal'
+<Wordmark@Label>:
+    text: 'PURENOTE'
+    font_name: t.FONT_RETRO
+    font_size: '24sp'
+    color: t.ACCENT
+    halign: 'left'
+    valign: 'middle'
+    text_size: self.size
+
+<NoteRow>:
+    orientation: 'vertical'
     size_hint_y: None
-    height: dp(86)
-    padding: [dp(12), dp(8)]
-    spacing: dp(8)
+    height: dp(116)
+    padding: [dp(22), dp(12)]
+    spacing: dp(4)
     canvas.before:
         Color:
-            rgba: t.BG_PANEL
-        RoundedRectangle:
-            pos: self.x + dp(6), self.y + dp(4)
-            size: self.width - dp(12), self.height - dp(8)
-            radius: [t.RADIUS]
-        Color:
-            rgba: (t.AMBER if self.pinned else t.GREEN)
-        RoundedRectangle:
-            pos: self.x + dp(6), self.y + dp(4)
-            size: dp(4), self.height - dp(8)
-            radius: [t.RADIUS]
-    BoxLayout:
-        orientation: 'vertical'
-        spacing: dp(2)
-        Label:
-            text: root.title
-            font_name: t.FONT_TITLE
-            font_size: t.FS_BODY
-            color: t.TEXT
-            halign: 'left'
-            valign: 'middle'
-            shorten: True
-            shorten_from: 'right'
-            text_size: self.width, None
-            size_hint_y: None
-            height: dp(24)
-        Label:
-            text: root.snippet
-            font_name: t.FONT_MONO
-            font_size: t.FS_META
-            color: t.TEXT_DIM
-            halign: 'left'
-            valign: 'top'
-            shorten: True
-            text_size: self.width, self.height
-        Label:
-            text: root.meta
-            font_name: t.FONT_MONO
-            font_size: t.FS_META
-            color: t.GREEN_DIM
-            halign: 'left'
-            valign: 'middle'
-            text_size: self.width, None
-            size_hint_y: None
-            height: dp(16)
-    IconButton:
-        accent: t.AMBER if root.pinned else t.TEXT_DIM
-        text: '*'
-        on_release: root.toggle_pin()
-
-# ===================================================================== tag chip
-<TagChip>:
-    orientation: 'horizontal'
-    size_hint_x: None
-    width: self.minimum_width
-    padding: [dp(10), dp(4)]
-    canvas.before:
-        Color:
-            rgba: t.GREEN if root.active else (t.GREEN[0], t.GREEN[1], t.GREEN[2], 0.12)
-        RoundedRectangle:
+            rgba: t.PANEL if self.state == 'down' else t.BG
+        Rectangle:
             pos: self.pos
             size: self.size
-            radius: [dp(12)]
+        Color:
+            rgba: t.LINE
+        Rectangle:
+            pos: self.x + dp(22), self.y
+            size: self.width - dp(44), dp(1)
     Label:
-        id: lbl
-        text: '#' + root.tag
-        font_name: t.FONT_MONO
-        font_size: t.FS_META
-        color: t.TEXT_INV if root.active else t.GREEN
-        size_hint_x: None
-        width: self.texture_size[0]
+        text: root.title
+        font_name: t.FONT_BODY
+        font_size: '18sp'
+        color: t.TEXT
+        halign: 'left'
+        valign: 'middle'
+        text_size: self.width, self.height
+        shorten: True
+        shorten_from: 'right'
+    Label:
+        text: root.snippet
+        font_name: t.FONT_BODY
+        font_size: '14sp'
+        color: t.MUTED
+        halign: 'left'
+        valign: 'middle'
+        text_size: self.width, self.height
+        shorten: True
+        shorten_from: 'right'
+    QuietLabel:
+        text: root.date
+        size_hint_y: None
+        height: dp(20)
 
-# =================================================================== list screen
 <ListScreen>:
     BoxLayout:
         orientation: 'vertical'
-        padding: [0, app.inset_top, 0, app.inset_bottom]
+        padding: app.insets
         TopBar:
-            Image:
-                source: 'logo.png'
+            Wordmark:
+            QuietButton:
+                text: '+'
+                primary: True
+                font_size: '26sp'
                 size_hint_x: None
-                width: dp(40)
-                allow_stretch: True
-                keep_ratio: True
-            Label:
-                text: 'PURENOTE'
-                font_name: t.FONT_TITLE
-                font_size: '24sp'
-                color: t.GREEN
-                halign: 'left'
-                valign: 'middle'
-                text_size: self.size
-            IconButton:
-                accent: t.MAGENTA
-                text: '='
-                on_release: app.open_backup_menu()
-        # search
+                width: dp(48)
+                on_release: app.new_note()
+            QuietButton:
+                text: 'Menu'
+                size_hint_x: None
+                width: dp(64)
+                on_release: app.open_menu()
         BoxLayout:
             size_hint_y: None
-            height: dp(48)
-            padding: [dp(12), dp(6)]
-            RetroInput:
+            height: dp(60)
+            padding: [dp(16), dp(4)]
+            NoteInput:
                 id: search
-                hint_text: 'cerca...'
+                hint_text: 'Cerca nelle note'
                 multiline: False
+                font_size: '16sp'
+                padding: [dp(14), dp(14)]
+                background_color: t.PANEL
                 on_text: app.set_query(self.text)
-        # tag filter bar
-        ScrollView:
-            id: tagscroll
+        BoxLayout:
             size_hint_y: None
-            height: dp(36)
-            do_scroll_y: False
-            BoxLayout:
-                id: tagbar
-                orientation: 'horizontal'
+            height: dp(44)
+            padding: [dp(22), 0]
+            QuietLabel:
+                text: root.summary
+            QuietButton:
+                id: undo
+                text: 'Annulla eliminazione'
+                font_size: '13sp'
+                disabled: True
+                opacity: 0 if self.disabled else 1
                 size_hint_x: None
-                width: self.minimum_width
-                spacing: dp(6)
-                padding: [dp(12), 0]
-        # list
+                width: dp(160)
+                height: dp(44)
+                on_release: app.undo_trash()
         FloatLayout:
             RecycleView:
-                id: rv
-                viewclass: 'NoteCard'
+                id: notes
+                viewclass: 'NoteRow'
+                bar_width: dp(3)
                 RecycleBoxLayout:
-                    default_size: None, dp(86)
+                    default_size: None, dp(116)
                     default_size_hint: 1, None
                     size_hint_y: None
                     height: self.minimum_height
                     orientation: 'vertical'
             Label:
                 id: empty
-                opacity: 0
-                text: 'nessuna nota\\n\\npremi  + NUOVA  per iniziare'
-                font_name: t.FONT_MONO
-                color: t.TEXT_DIM
+                text: root.empty_message
+                font_name: t.FONT_BODY
+                font_size: '17sp'
+                color: t.MUTED
                 halign: 'center'
-                pos_hint: {'center_x': .5, 'center_y': .5}
-            RetroButton:
-                text: '+ NUOVA'
-                font_name: t.FONT_MONO
-                accent: t.GREEN
-                size_hint: None, None
-                size: dp(130), dp(50)
-                pos_hint: {'right': 0.97, 'y': 0.03}
-                on_release: app.new_note()
+                valign: 'middle'
+                text_size: self.width - dp(48), self.height
 
-# ================================================================= editor screen
 <EditorScreen>:
     BoxLayout:
         orientation: 'vertical'
-        padding: [0, app.inset_top, 0, app.inset_bottom]
-        # --- title bar: back + screen name + live counter
+        padding: app.insets
         TopBar:
-            IconButton:
-                accent: t.GREEN
-                text: '<'
+            QuietButton:
+                text: 'Note'
+                size_hint_x: None
+                width: dp(60)
                 on_release: app.go_list()
+            Wordmark:
+                font_size: min(sp(21), self.width / 5.4)
+                halign: 'center'
+            QuietButton:
+                text: '+'
+                font_size: '26sp'
+                size_hint_x: None
+                width: dp(48)
+                on_release: app.new_note()
+            QuietButton:
+                text: 'Menu'
+                size_hint_x: None
+                width: dp(60)
+                on_release: app.open_menu()
+        Widget:
+            size_hint_y: None
+            height: dp(1)
+            canvas:
+                Color:
+                    rgba: t.LINE
+                Rectangle:
+                    pos: self.x + dp(20), self.y
+                    size: self.width - dp(40), dp(1)
+        NoteInput:
+            id: body
+            hint_text: 'Comincia da un pensiero…'
+            line_spacing: dp(6)
+            on_text: root.on_text_changed(self.text)
+        BoxLayout:
+            orientation: 'vertical'
+            size_hint_y: None
+            height: dp(88) if root.save_error else dp(72)
+            padding: [dp(20), dp(4), dp(20), dp(12)]
             Label:
-                text: 'NOTA' if root.note_id else 'NUOVA'
-                font_name: t.FONT_TITLE
-                font_size: '20sp'
-                color: t.GREEN
+                text: root.counts
+                font_name: t.FONT_BODY
+                font_size: '12sp'
+                color: t.MUTED
                 halign: 'left'
                 valign: 'middle'
                 text_size: self.size
-            Label:
-                text: root.counts
-                font_name: t.FONT_MONO
-                font_size: t.FS_META
-                color: t.TEXT_DIM
-                halign: 'right'
-                valign: 'middle'
-                text_size: self.size
-        # --- action bar: clear icon + label buttons
-        BoxLayout:
-            size_hint_y: None
-            height: dp(52)
-            padding: [dp(6), dp(2)]
-            spacing: dp(4)
-            canvas.before:
-                Color:
-                    rgba: t.BG_PANEL
-                Rectangle:
-                    pos: self.pos
-                    size: self.size
-            ToolButton:
-                glyph: 'v'
-                label: 'Salva'
-                accent: t.GREEN
-                on_release: root.manual_save()
-            ToolButton:
-                glyph: '*'
-                label: 'Fissa'
-                accent: t.AMBER if root.pinned else t.TEXT_DIM
-                on_release: root.toggle_pin()
-            ToolButton:
-                glyph: 'o'
-                label: 'Modifica' if root.preview else 'Anteprima'
-                accent: t.MAGENTA if root.preview else t.TEXT_DIM
-                on_release: root.toggle_preview()
-            ToolButton:
-                glyph: '^'
-                label: 'Condividi'
-                accent: t.GREEN
-                on_release: root.export()
-            ToolButton:
-                glyph: 'x'
-                label: 'Elimina'
-                accent: t.DANGER
-                on_release: root.delete()
-        # --- inputs
-        BoxLayout:
-            orientation: 'vertical'
-            padding: [dp(12), dp(8)]
-            spacing: dp(8)
-            RetroInput:
-                id: title
-                hint_text: 'titolo'
-                font_name: t.FONT_TITLE
-                font_size: '20sp'
-                multiline: False
-                size_hint_y: None
-                height: dp(48)
-                on_text: root.on_text_changed()
-            RetroInput:
-                id: tags
-                hint_text: 'tag separati da virgola'
-                font_size: t.FS_META
-                multiline: False
-                size_hint_y: None
-                height: dp(38)
-                on_text: root.on_text_changed()
-            # body / preview live in one cell; the inactive one is disabled
-            # (disabled widgets don't receive touches) so there is no overlap.
-            FloatLayout:
-                id: body_area
-                RetroInput:
-                    id: body
-                    hint_text: 'scrivi... (markdown supportato)'
-                    font_size: t.FS_BODY
-                    size_hint: 1, 1
-                    pos_hint: {'x': 0, 'y': 0}
-                    opacity: 0 if root.preview else 1
-                    disabled: root.preview
-                    on_text: root.on_text_changed()
-                ScrollView:
-                    id: preview_box
-                    # full-size only in preview; collapses to 0x0 while editing
-                    # so it cannot intercept touches meant for the body input
-                    size_hint: (1, 1) if root.preview else (None, None)
-                    size: 0, 0
-                    pos_hint: {'x': 0, 'y': 0}
-                    opacity: 1 if root.preview else 0
-                    disabled: not root.preview
-                    do_scroll_x: False
-                    BoxLayout:
-                        id: preview_col
-                        orientation: 'vertical'
-                        size_hint_y: None
-                        height: self.minimum_height
-                        padding: [dp(6), dp(6)]
-                        spacing: dp(2)
+            QuietButton:
+                text: root.status
+                font_size: '12sp'
+                danger: root.save_error
+                height: dp(48) if root.save_error else dp(32)
+                halign: 'left'
+                on_release: app.flush() if root.save_error else None
+
+RootManager:
+    transition: NoTransition()
+    canvas.before:
+        Color:
+            rgba: t.BG
+        Rectangle:
+            pos: self.pos
+            size: self.size
+    EditorScreen:
+        name: 'editor'
+    ListScreen:
+        name: 'list'

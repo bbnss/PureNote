@@ -1,635 +1,564 @@
-"""PureNote — a retro/CRT local note app built with Kivy.
+"""PureNote: one quiet place to write, with local, automatic persistence."""
 
-100% offline: notes live in a local SQLite file. Refreshed from the original
-single-textbox version to a multi-note app with titles, dates, search, tags,
-markdown preview and export/backup.
-"""
+from __future__ import annotations
 
 import os
-import re
+import sqlite3
 import time
-
-from kivy.config import Config
+from collections.abc import Callable
+from pathlib import Path
 
 from kivy.app import App
-from kivy.core.window import Window
 from kivy.clock import Clock
-from kivy.factory import Factory
+from kivy.core.clipboard import Clipboard
+from kivy.core.window import Window
 from kivy.lang import Builder
+from kivy.logger import Logger
 from kivy.metrics import dp
-from kivy.properties import (
-    BooleanProperty,
-    ColorProperty,
-    NumericProperty,
-    ListProperty,
-    StringProperty,
-)
+from kivy.properties import BooleanProperty, ListProperty, NumericProperty, StringProperty
 from kivy.uix.behaviors import ButtonBehavior
 from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.filechooser import FileChooserListView
 from kivy.uix.label import Label
-from kivy.uix.screenmanager import Screen, ScreenManager, SlideTransition
+from kivy.uix.popup import Popup
+from kivy.uix.recycleview import RecycleView  # noqa: F401 - registers the KV class
+from kivy.uix.screenmanager import Screen, ScreenManager
+from kivy.uix.scrollview import ScrollView
 from kivy.uix.textinput import TextInput
+from kivy.utils import platform
 
 import theme
-import md
+from backup import MAX_BACKUP_BYTES, export_backup, read_backup
 from db import NoteStore
+from editor import EditorSession
+from stats import count_text
+
+BASE_DIR = Path(__file__).resolve().parent
 
 
-def _user_dir():
-    """Writable base dir: app user_data_dir on Android, cwd elsewhere."""
-    try:
-        from android.storage import app_storage_path  # noqa
-
-        return app_storage_path()
-    except Exception:
-        return os.path.dirname(os.path.abspath(__file__))
+class QuietButton(ButtonBehavior, Label):
+    primary = BooleanProperty(False)
+    danger = BooleanProperty(False)
 
 
-def _fmt_date(ts):
-    if not ts:
-        return ""
-    return time.strftime("%d/%m/%Y %H:%M", time.localtime(ts))
-
-
-def _snippet(body, n=90):
-    text = " ".join((body or "").split())
-    return text[:n] + ("..." if len(text) > n else "")
-
-
-# ------------------------------------------------------------ styled widgets
-# Defined in Python so `accent` always has a real (iterable) default before
-# the kv canvas rules reference accent[0]/[1]/[2].
-class RetroButton(ButtonBehavior, Label):
-    accent = ColorProperty(theme.GREEN)
-
-
-class GhostButton(ButtonBehavior, Label):
-    accent = ColorProperty(theme.GREEN)
-
-
-class IconButton(ButtonBehavior, Label):
-    accent = ColorProperty(theme.GREEN)
-
-
-class RetroInput(TextInput):
+class NoteInput(TextInput):
     pass
 
 
-class ToolButton(ButtonBehavior, BoxLayout):
-    """Toolbar button rendered as an icon glyph over a small text label."""
-    glyph = StringProperty()
-    label = StringProperty()
-    accent = ColorProperty(theme.GREEN)
-
-
-# ---------------------------------------------------------------- list screen
-class NoteCard(ButtonBehavior, BoxLayout):
+class NoteRow(ButtonBehavior, BoxLayout):
     note_id = NumericProperty(0)
     title = StringProperty()
     snippet = StringProperty()
-    meta = StringProperty()
-    pinned = BooleanProperty(False)
+    date = StringProperty()
 
     def on_release(self):
         App.get_running_app().open_editor(self.note_id)
 
-    def toggle_pin(self):
-        app = App.get_running_app()
-        app.store.set_pinned(self.note_id, not self.pinned)
-        app.refresh_list()
-
-
-class UndoBar(BoxLayout):
-    """Transient bottom bar with an undo action; `on_undo` set per use."""
-    msg = StringProperty("")
-
-    def on_undo(self):
-        pass
-
-
-class CheckRow(ButtonBehavior, BoxLayout):
-    """A tappable checklist row in the preview; toggles the source line."""
-    checked = BooleanProperty(False)
-    label_markup = StringProperty("")
-    line = NumericProperty(0)
-
-    def on_release(self):
-        App.get_running_app().sm.get_screen("editor").toggle_check(self.line)
-
-
-class TagChip(ButtonBehavior, BoxLayout):
-    tag = StringProperty()
-    active = BooleanProperty(False)
-
-    def on_release(self):
-        app = App.get_running_app()
-        app.set_tag_filter("" if self.active else self.tag)
-
 
 class ListScreen(Screen):
-    query = StringProperty("")
-    active_tag = StringProperty("")
+    query = StringProperty()
+    empty_message = StringProperty()
+    summary = StringProperty()
 
 
-# -------------------------------------------------------------- editor screen
 class EditorScreen(Screen):
-    note_id = NumericProperty(0)        # 0 == new note
-    preview = BooleanProperty(False)
-    pinned = BooleanProperty(False)
-    counts = StringProperty("")
-    _loading = False
+    counts = StringProperty("0 parole   ·   0 caratteri   ·   ≈0 token")
+    status = StringProperty("Salvataggio automatico")
+    save_error = BooleanProperty(False)
+    loading = False
 
-    def load(self, note_id):
-        self._loading = True
-        self.note_id = note_id or 0
-        self._set_preview(False)
+    def on_text_changed(self, text):
         app = App.get_running_app()
-        if note_id:
-            n = app.store.get(note_id)
-            self.ids.title.text = n["title"]
-            self.ids.body.text = n["body"]
-            self.ids.tags.text = n["tags"]
-            self.pinned = bool(n["pinned"])
-        else:
-            self.ids.title.text = ""
-            self.ids.body.text = ""
-            self.ids.tags.text = ""
-            self.pinned = False
-        self.update_counts()
-        self._loading = False
-
-    # ------------------------------------------------------------- text/save
-    def on_text_changed(self):
-        """Bound to every input's on_text: refresh counts and debounce save."""
-        self.update_counts()
-        if not self._loading:
-            Clock.unschedule(self._autosave)
-            Clock.schedule_once(self._autosave, 1.0)
-
-    def _autosave(self, *_):
-        self._persist()
-
-    def update_counts(self, *_):
-        body = self.ids.body.text
-        self.counts = f"{len(body.split())} par / {len(body)} car"
-
-    def _persist(self):
-        """Write the note to the DB without navigating. Returns True if saved."""
-        app = App.get_running_app()
-        title = self.ids.title.text.strip()
-        body = self.ids.body.text
-        tags = ",".join(
-            t.strip() for t in self.ids.tags.text.split(",") if t.strip()
-        )
-        if not title and not body.strip():
-            return False
-        if not title:
-            title = NoteStore._title_from_body(body)
-        if self.note_id:
-            app.store.update(self.note_id, title, body, tags, self.pinned)
-        else:
-            self.note_id = app.store.add(title, body, tags, self.pinned)
-        return True
-
-    def manual_save(self):
-        Clock.unschedule(self._autosave)
-        if self._persist():
-            App.get_running_app().flash("Salvato")
-        else:
-            App.get_running_app().flash("Nota vuota")
-
-    # ---------------------------------------------------------------- actions
-    def _set_preview(self, on):
-        """Toggle preview mode.
-
-        The preview pane stays in the tree but collapses to size 0 while
-        editing (a 0-size widget can't intercept touches meant for the body;
-        a merely-disabled full-size overlay still swallows them on Android).
-        """
-        if on:
-            self._build_preview()
-        self.preview = on
-
-    def _build_preview(self):
-        """Render the body into the preview column as tappable blocks."""
-        col = self.ids.preview_col
-        col.clear_widgets()
-        for blk in md.to_blocks(self.ids.body.text):
-            if blk["type"] == "check":
-                col.add_widget(
-                    CheckRow(
-                        checked=blk["checked"],
-                        label_markup=blk["label"],
-                        line=blk["line"],
-                    )
-                )
-            else:
-                col.add_widget(Factory.PreviewLabel(text=blk["text"]))
-
-    def toggle_check(self, line):
-        """Flip a `- [ ]`/`- [x]` checkbox on the given body line in place."""
-        lines = self.ids.body.text.split("\n")
-        if not (0 <= line < len(lines)):
-            return
-        m = re.match(r"^(\s*[-*]\s+\[)( |x|X)(\].*)$", lines[line])
-        if not m:
-            return
-        lines[line] = m.group(1) + (" " if m.group(2) != " " else "x") + m.group(3)
-        self.ids.body.text = "\n".join(lines)
-        self._build_preview()
-        self._persist()
-
-    def toggle_preview(self):
-        self._set_preview(not self.preview)
-
-    def toggle_pin(self):
-        self.pinned = not self.pinned
-        if self.note_id:
-            self._persist()
-
-    def delete(self):
-        """Soft-delete: move to trash and offer an undo (recoverable)."""
-        app = App.get_running_app()
-        Clock.unschedule(self._autosave)
-        if self.note_id:
-            nid = self.note_id
-            app.store.trash(nid)
-            self.note_id = 0
-            app.go_list(save=False)
-            app.snack_undo("Nota nel cestino", lambda: app.restore_note(nid))
-        else:
-            app.go_list(save=False)
-
-    def export(self):
-        App.get_running_app().share_note(
-            self.ids.title.text, self.ids.body.text
-        )
+        if not self.loading and hasattr(app, "session"):
+            app.session.edit(text)
 
 
 class RootManager(ScreenManager):
     pass
 
 
-# ----------------------------------------------------------------------- app
 class PureNoteApp(App):
-    tags = ListProperty([])
-    # Safe-area insets (px). Android 15 (target API 35) draws edge-to-edge,
-    # so we pad content away from the status bar (top) and nav bar (bottom).
-    inset_top = NumericProperty(0)
-    inset_bottom = NumericProperty(0)
+    insets = ListProperty([0, 0, 0, 0])
 
     def build(self):
         self.title = "PureNote"
+        self.icon = str(BASE_DIR / "logo.png")
         Window.clearcolor = theme.BG
-        self._read_android_insets()
-        os.environ.setdefault(
-            "PURENOTE_DB", os.path.join(_user_dir(), "notes.db")
-        )
-        self.store = NoteStore(os.environ["PURENOTE_DB"])
-        self._seed_if_empty()
-        root = Builder.load_file(
-            os.path.join(os.path.dirname(__file__), "purenote_ui.kv")
-        )
-        Window.bind(on_keyboard=self._on_key)
-        Clock.schedule_once(lambda *_: self.refresh_list(), 0)
-        return root
+        Window.softinput_mode = ""
+        self.documents = None
+        self.android_window = None
+        self._popup: Popup | None = None
+        self._undo_id: int | None = None
+        self._undo_event = None
+        self._stats_trigger = Clock.create_trigger(self._update_stats, 0.06)
+        self._search_trigger = Clock.create_trigger(self.refresh_list, 0.12)
+        # Keep the old desktop path so upgrading finds the existing database.
+        directory = Path(self.user_data_dir) if platform == "android" else BASE_DIR
+        path = Path(os.environ.get("PURENOTE_DB", str(directory / "notes.db")))
+        path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            self.store = NoteStore(path)
+        except (sqlite3.Error, OSError, ValueError) as error:
+            Logger.exception("PureNote: cannot open notes")
+            return self.message_label(
+                f"Impossibile aprire le note.\n\n{error}\n\n"
+                "Il database originale è stato conservato."
+            )
+        self.session = EditorSession(self.store, Clock.schedule_once, self._session_changed)
+        Window.bind(on_keyboard=self._on_key, on_request_close=self._on_request_close)
+        return Builder.load_file(str(BASE_DIR / "purenote_ui.kv"))
 
-    def _seed_if_empty(self):
-        """On a fresh install (no DB rows) create a single welcome note.
-
-        Replaces shipping a binary seed `notes.db` in the APK: the note is
-        built in code so it always matches the current feature set and the
-        repo stays free of a tracked database.
-        """
-        if not self.store.is_empty():
+    def on_start(self):
+        if not hasattr(self, "session"):
             return
-        body = (
-            "# Benvenuto in PureNote\n\n"
-            "App di note **100% offline**: i tuoi appunti restano sul telefono.\n\n"
-            "## Cosa puoi fare\n"
-            "- Scrivi in **markdown** e tocca *Anteprima*\n"
-            "- Tocca le caselle qui sotto per spuntarle:\n"
-            "- [ ] provare la *ricerca* in alto\n"
-            "- [x] aprire questa nota\n"
-            "- [ ] fissare una nota con *Fissa*\n\n"
-            "## Tag\n"
-            "Aggiungi tag separati da virgola per filtrare le note.\n"
-        )
-        self.store.add("Benvenuto in PureNote", body, "guida, info", 1)
+        if platform == "android":
+            from android_window import AndroidWindow
+            from documents import AndroidDocuments
 
-    def _on_key(self, window, key, *args):
-        # Android back / Esc: from the editor, save and return to the list
-        # (consume the event); from the list, let it close the app.
-        if key == 27:
-            if self.sm.current == "editor":
-                self.go_list()
-                return True
+            self.documents = AndroidDocuments(self.show_message)
+            self.android_window = AndroidWindow(self._set_insets)
+        note = self.store.last_note()
+        self.open_editor(note.id if note else None)
+
+    def _set_insets(self, left, top, right, bottom):
+        self.insets = [left, top, right, bottom]
+
+    @property
+    def editor(self) -> EditorScreen:
+        return self.root.get_screen("editor")
+
+    def _session_changed(self):
+        if not self.root:
+            return
+        editor = self.editor
+        editor.save_error = bool(self.session.error)
+        if self.session.error:
+            editor.status = "Salvataggio non riuscito · tocca per riprovare"
+        elif self.session.dirty:
+            editor.status = "Salvataggio…"
+        elif self.session.note_id:
+            editor.status = "Tutto salvato"
+        else:
+            editor.status = "Salvataggio automatico"
+        self._stats_trigger()
+
+    def _update_stats(self, *_):
+        stats = count_text(self.session.text)
+        self.editor.counts = (
+            f"{stats.words} parole   ·   {stats.characters} caratteri"
+            f"   ·   ≈{stats.estimated_tokens} token"
+        )
+
+    def flush(self) -> bool:
+        if self.session.flush():
+            return True
+        self.show_message(
+            "Il testo resta aperto. Non è stato possibile salvarlo.\n\n"
+            f"{self.session.error}\n\nPuoi riprovare o condividere il testo dal menu."
+        )
         return False
 
-    def _read_android_insets(self):
-        """Read system bar heights (px) so content clears the status/nav bars.
-
-        Android 15 enforces edge-to-edge for apps targeting API 35; without
-        this the top bar hides under the clock and the Save button/FAB hide
-        under the gesture/nav bar. No-op on desktop.
-        """
+    def open_editor(self, note_id: int | None = None):
         try:
-            from jnius import autoclass
-
-            activity = autoclass("org.kivy.android.PythonActivity").mActivity
-            res = activity.getResources()
-
-            def dim(name):
-                rid = res.getIdentifier(name, "dimen", "android")
-                return res.getDimensionPixelSize(rid) if rid > 0 else 0
-
-            self.inset_top = dim("status_bar_height")
-            self.inset_bottom = dim("navigation_bar_height")
-        except Exception:
-            self.inset_top = 0
-            self.inset_bottom = 0
-
-    # ----------------------------------------------------------- navigation
-    @property
-    def sm(self):
-        return self.root
-
-    def open_editor(self, note_id):
-        self.sm.transition = SlideTransition(direction="left")
-        self.sm.get_screen("editor").load(note_id)
-        self.sm.current = "editor"
+            if not self.session.open(note_id):
+                self.flush()
+                return
+        except (sqlite3.Error, OSError, ValueError) as error:
+            self.show_message(str(error))
+            return
+        self.editor.loading = True
+        self.editor.ids.body.text = self.session.text
+        self.editor.ids.body.cursor = (0, 0)
+        self.editor.loading = False
+        self.root.current = "editor"
+        self._update_stats()
+        # Focus on new sheets only, so reading the last note doesn't open the IME.
+        self.editor.ids.body.focus = note_id is None
 
     def new_note(self):
-        self.open_editor(0)
+        self.open_editor()
 
-    def go_list(self, save=True):
-        editor = self.sm.get_screen("editor")
-        Clock.unschedule(editor._autosave)
-        if save:
-            editor._persist()
-        self.sm.transition = SlideTransition(direction="right")
-        self.sm.current = "list"
-        self.refresh_list()
-
-    # -------------------------------------------------------------- list data
-    def set_query(self, text):
-        self.sm.get_screen("list").query = text
-        self.refresh_list()
-
-    def set_tag_filter(self, tag):
-        self.sm.get_screen("list").active_tag = tag
-        self.refresh_list()
-
-    def refresh_list(self):
-        ls = self.sm.get_screen("list")
-        notes = self.store.list(query=ls.query, tag=ls.active_tag)
-        ls.ids.rv.data = [
-            {
-                "note_id": n["id"],
-                "title": n["title"] or "Senza titolo",
-                "snippet": _snippet(n["body"]),
-                "meta": _fmt_date(n["updated_at"]),
-                "pinned": bool(n["pinned"]),
-            }
-            for n in notes
-        ]
-        ls.ids.empty.opacity = 0 if notes else 1
-        self._rebuild_tags(ls)
-
-    def _rebuild_tags(self, ls):
-        bar = ls.ids.tagbar
-        bar.clear_widgets()
-        tags = self.store.all_tags()
-        for t in tags:
-            chip = TagChip(tag=t, active=(t == ls.active_tag))
-            bar.add_widget(chip)
-        ls.ids.tagscroll.opacity = 1 if tags else 0
-        ls.ids.tagscroll.height = "36dp" if tags else 0
-
-    def restore_note(self, note_id):
-        self.store.restore(note_id)
-        self.refresh_list()
-        self.flash("Ripristinata")
-
-    # --------------------------------------------------------- share / export
-    def share_note(self, title, body):
-        """Open the native Android share sheet with the note as plain text."""
-        text = (f"{title}\n\n{body}".strip() if title else (body or "")).strip()
-        if not text:
-            self.flash("Nota vuota")
+    def go_list(self):
+        if not self.flush():
             return
-        try:
-            from jnius import autoclass, cast
+        self.editor.ids.body.focus = False
+        self.root.current = "list"
+        self.refresh_list()
 
-            Intent = autoclass("android.content.Intent")
-            String = autoclass("java.lang.String")
-            activity = autoclass("org.kivy.android.PythonActivity").mActivity
+    def set_query(self, query: str):
+        if not self.root:
+            return
+        self.root.get_screen("list").query = query
+        self._search_trigger()
 
-            intent = Intent()
-            intent.setAction(Intent.ACTION_SEND)
-            intent.setType("text/plain")
-            intent.putExtra(
-                Intent.EXTRA_TEXT, cast("java.lang.CharSequence", String(text))
-            )
-            if title:
-                intent.putExtra(
-                    Intent.EXTRA_SUBJECT,
-                    cast("java.lang.CharSequence", String(title)),
-                )
-            chooser = Intent.createChooser(
-                intent, cast("java.lang.CharSequence", String("Condividi nota"))
-            )
-            activity.startActivity(chooser)
-        except Exception:
-            # Desktop fallback: write a .md file and report where.
-            self._export_note_file(title, body)
-
-    def _export_note_file(self, title, body):
-        safe = "".join(c if c.isalnum() or c in " -_" else "_" for c in title).strip()
-        safe = (safe or "nota")[:40]
-        out_dir = os.path.join(_user_dir(), "PureNote_export")
-        os.makedirs(out_dir, exist_ok=True)
-        path = os.path.join(out_dir, f"{safe}.md")
-        content = f"# {title}\n\n{body}\n" if title else (body or "")
-        with open(path, "w", encoding="utf-8") as f:
-            f.write(content)
-        self.toast(f"Esportato in:\n{path}")
-
-    def export_db(self):
-        import shutil
-
-        out_dir = os.path.join(_user_dir(), "PureNote_export")
-        os.makedirs(out_dir, exist_ok=True)
-        stamp = time.strftime("%Y%m%d_%H%M%S")
-        path = os.path.join(out_dir, f"purenote_backup_{stamp}.db")
-        shutil.copyfile(self.store.path, path)
-        self.toast(f"Backup salvato:\n{path}")
-
-    # ------------------------------------------------------------- ui helpers
-    def flash(self, message):
-        """Brief, non-blocking confirmation that fades out."""
-        from kivy.uix.label import Label
-        from kivy.animation import Animation
-
-        lbl = Label(
-            text=message,
-            font_name=theme.FONT_TITLE,
-            font_size=theme.FS_BTN,
-            color=(theme.GREEN[0], theme.GREEN[1], theme.GREEN[2], 1),
-            size_hint=(None, None),
-            size=(Window.width, "40dp"),
+    def refresh_list(self, *_):
+        screen = self.root.get_screen("list")
+        notes = self.store.list_notes(screen.query.strip())
+        screen.summary = f"{len(notes)} " + ("nota" if len(notes) == 1 else "note")
+        screen.empty_message = (
+            "Nessuna corrispondenza.\nProva un’altra ricerca."
+            if screen.query.strip()
+            else "Uno spazio per i tuoi pensieri.\nTocca + per la prima nota."
         )
-        lbl.center_x = Window.width / 2
-        lbl.y = Window.height * 0.12 + self.inset_bottom
-        Window.add_widget(lbl)
-        anim = Animation(opacity=0, duration=1.3, t="in_quad")
-        anim.bind(on_complete=lambda *a: Window.remove_widget(lbl))
-        anim.start(lbl)
+        screen.ids.notes.data = [
+            {
+                "note_id": note.id,
+                "title": note.title,
+                "snippet": self._snippet(note.body),
+                "date": time.strftime("%d.%m.%Y · %H:%M", time.localtime(note.updated_at)),
+            }
+            for note in notes
+        ]
+        screen.ids.empty.opacity = 0 if notes else 1
 
-    def snack_undo(self, message, on_undo, timeout=4):
-        """Bottom bar with an ANNULLA action that auto-dismisses."""
-        self._undo_dismiss()
-        bar = Factory.UndoBar(msg=message)
-        bar.on_undo = lambda: self._undo_do(on_undo)
-        bar.width = Window.width - dp(24)
-        bar.x = dp(12)
-        bar.y = self.inset_bottom + dp(12)
-        Window.add_widget(bar)
-        self._undo_bar = bar
-        Clock.schedule_once(self._undo_dismiss, timeout)
+    @staticmethod
+    def _snippet(text: str) -> str:
+        lines = text.lstrip().splitlines()
+        return " ".join(" ".join(lines[1:]).split())[:140]
 
-    def _undo_dismiss(self, *_):
-        Clock.unschedule(self._undo_dismiss)
-        bar = getattr(self, "_undo_bar", None)
-        if bar is not None:
-            Window.remove_widget(bar)
-            self._undo_bar = None
+    def _on_key(self, _window, key, *_):
+        if key == 27 and self._popup is None and self.root.current == "editor":
+            if self.editor.ids.body.focus:
+                self.editor.ids.body.focus = False
+            else:
+                self.go_list()
+            return True
+        return False
 
-    def _undo_do(self, cb):
-        self._undo_dismiss()
-        cb()
+    def _on_request_close(self, *_):
+        return hasattr(self, "session") and not self.flush()
 
-    def toast(self, message):
-        from kivy.uix.popup import Popup
-        from kivy.uix.label import Label
+    def on_pause(self):
+        if hasattr(self, "session"):
+            self.session.flush()
+        return True
 
-        content = Label(
-            text=message,
-            font_name=theme.FONT_MONO,
-            halign="center",
+    def on_resume(self):
+        if hasattr(self, "session"):
+            self.session.flush()
+
+    def on_stop(self):
+        if hasattr(self, "session"):
+            if not self.session.flush():
+                Logger.error("PureNote: stopped with unsaved changes: %s", self.session.error)
+            self.session.dispose()
+            self.store.close()
+        if self.documents:
+            self.documents.close()
+        if self.android_window:
+            self.android_window.close()
+        Window.unbind(on_keyboard=self._on_key, on_request_close=self._on_request_close)
+
+    # Dialogs use the same typography and touch sizes as the writing surface.
+    @staticmethod
+    def message_label(text: str, *, scrollable=False) -> Label:
+        label = Label(
+            text=text,
+            font_name=theme.FONT_BODY,
+            font_size="16sp",
+            color=theme.TEXT,
+            halign="left",
             valign="middle",
         )
-        content.bind(size=lambda lbl, s: setattr(lbl, "text_size", s))
-        Popup(title="PureNote", size_hint=(0.85, 0.4), content=content).open()
+        if scrollable:
+            label.size_hint_y = None
+            label.valign = "top"
+            label.bind(
+                width=lambda widget, width: setattr(widget, "text_size", (width, None)),
+                texture_size=lambda widget, size: setattr(widget, "height", size[1]),
+            )
+        else:
+            label.bind(size=lambda widget, size: setattr(widget, "text_size", size))
+        return label
 
-    def confirm(self, message, on_yes):
-        from kivy.uix.popup import Popup
-        from kivy.uix.label import Label
-        from kivy.uix.button import Button
-
-        box = BoxLayout(orientation="vertical", spacing=10, padding=10)
-        box.add_widget(Label(text=message, font_name=theme.FONT_MONO))
-        row = BoxLayout(size_hint_y=None, height="48dp", spacing=10)
-        popup = Popup(title="Conferma", content=box, size_hint=(0.85, 0.45))
-
-        def yes(*_):
-            popup.dismiss()
-            on_yes()
-
-        row.add_widget(Button(text="Annulla", on_release=popup.dismiss))
-        row.add_widget(Button(text="Elimina", on_release=yes))
-        box.add_widget(row)
-        popup.open()
-
-    def open_backup_menu(self):
-        from kivy.uix.popup import Popup
-        from kivy.uix.button import Button
-
-        box = BoxLayout(orientation="vertical", spacing=10, padding=10)
-        popup = Popup(title="Backup & Export", content=box, size_hint=(0.85, 0.5))
-
-        def do(fn):
-            popup.dismiss()
-            fn()
-
-        b1 = Button(text="Esporta backup DB", font_name=theme.FONT_TITLE)
-        b1.bind(on_release=lambda *_: do(self.export_db))
-        box.add_widget(b1)
-        n = self.store.count_trashed()
-        b_trash = Button(
-            text=f"Cestino ({n})" if n else "Cestino",
-            font_name=theme.FONT_TITLE,
+    def _dialog(self, title: str, content, *, height=0.65) -> Popup:
+        if self._popup:
+            self._popup.dismiss()
+        popup = Popup(
+            title=title,
+            content=content,
+            size_hint=(0.94, height),
+            background="",
+            background_color=theme.PANEL,
+            separator_color=theme.LINE,
+            title_font=theme.FONT_BODY,
+            title_color=theme.ACCENT,
+            title_size="18sp",
         )
-        b_trash.bind(on_release=lambda *_: do(self.open_trash))
-        box.add_widget(b_trash)
-        b2 = Button(text="Chiudi", font_name=theme.FONT_TITLE)
-        b2.bind(on_release=popup.dismiss)
-        box.add_widget(b2)
+        popup.bind(on_dismiss=lambda *_: setattr(self, "_popup", None))
+        self._popup = popup
         popup.open()
+        return popup
+
+    def _button(self, text: str, callback: Callable, *, danger=False, primary=False):
+        button = QuietButton(text=text, danger=danger, primary=primary)
+        button.bind(on_release=lambda *_: callback())
+        return button
+
+    def _actions(self, title: str, actions: list[tuple[str, Callable]], message=""):
+        box = BoxLayout(orientation="vertical", spacing=dp(8), padding=dp(8))
+        if message:
+            scroll = ScrollView(do_scroll_x=False)
+            label = self.message_label(message, scrollable=True)
+            scroll.add_widget(label)
+            box.add_widget(scroll)
+        items = BoxLayout(orientation="vertical", spacing=dp(6), size_hint_y=None)
+        if actions:
+            scroll = ScrollView(do_scroll_x=False)
+            items.bind(minimum_height=items.setter("height"))
+            scroll.add_widget(items)
+            box.add_widget(scroll)
+        popup = self._dialog(title, box)
+        for text, action in actions:
+
+            def invoke(fn=action):
+                popup.dismiss()
+                fn()
+
+            items.add_widget(self._button(text, invoke))
+        box.add_widget(self._button("Chiudi", popup.dismiss))
+
+    def show_message(self, message: str):
+        self._actions("PureNote", [], message)
+
+    def confirm(self, title: str, message: str, callback: Callable, label="Conferma"):
+        box = BoxLayout(orientation="vertical", spacing=dp(12), padding=dp(8))
+        box.add_widget(self.message_label(message))
+        popup = self._dialog(title, box, height=0.5)
+
+        def accept():
+            popup.dismiss()
+            self._storage_action(callback)
+
+        box.add_widget(self._button(label, accept, danger=label == "Elimina"))
+        box.add_widget(self._button("Annulla", popup.dismiss))
+
+    def _storage_action(self, action: Callable):
+        try:
+            action()
+        except (sqlite3.Error, OSError, ValueError) as error:
+            Logger.exception("PureNote: storage operation failed")
+            self.show_message(f"Operazione non riuscita.\n\n{error}")
+
+    def open_menu(self):
+        self.editor.ids.body.focus = False
+        actions = []
+        if self.root.current == "editor":
+            actions.extend(
+                [("Condividi nota", self.share_note), ("Sposta nel cestino", self.trash_note)]
+            )
+            if self.session.error:
+                actions.append(("Riprova salvataggio", self.flush))
+        if self._undo_id is not None:
+            actions.append(("Annulla ultima eliminazione", self.undo_trash))
+        actions.extend(
+            [
+                ("Cestino", self.open_trash),
+                ("Esporta backup", self.export_notes),
+                ("Ripristina backup", self.restore_notes),
+                ("Informazioni sui contatori", self.explain_counts),
+            ]
+        )
+        self._actions("PureNote", actions)
+
+    def explain_counts(self):
+        self.show_message(
+            "Parole: gruppi di testo separati da spazi.\n\n"
+            "Caratteri: punti di codice Unicode, inclusi spazi e ritorni a capo. "
+            "Alcune emoji sono composte da più caratteri.\n\n"
+            "≈ Token: stima pari ai caratteri divisi per 4, arrotondata per eccesso. "
+            "Il conteggio effettivo dipende dal modello."
+        )
+
+    def trash_note(self):
+        if not self.flush():
+            return
+        note_id = self.session.note_id
+        if note_id is None:
+            self.go_list()
+            return
+
+        def move():
+            self.store.set_trashed(note_id, True)
+            self.session.open(None)
+            self._undo_id = note_id
+            self.go_list()
+            self.root.get_screen("list").ids.undo.disabled = False
+            if self._undo_event:
+                self._undo_event.cancel()
+            self._undo_event = Clock.schedule_once(self._expire_undo, 8)
+
+        self._storage_action(move)
+
+    def _expire_undo(self, *_):
+        self._undo_id = None
+        self.root.get_screen("list").ids.undo.disabled = True
+
+    def undo_trash(self):
+        if self._undo_id is None:
+            return
+
+        def restore():
+            note_id = self._undo_id
+            self.store.set_trashed(note_id, False)
+            self._expire_undo()
+            self.open_editor(note_id)
+
+        self._storage_action(restore)
 
     def open_trash(self):
-        from kivy.uix.popup import Popup
-        from kivy.uix.scrollview import ScrollView
-        from kivy.uix.button import Button
-
-        trashed = self.store.list(trashed=1)
-        box = BoxLayout(orientation="vertical", spacing=8, padding=10)
-        popup = Popup(title="Cestino", content=box, size_hint=(0.94, 0.85))
-
-        if not trashed:
-            box.add_widget(Label(text="Cestino vuoto", font_name=theme.FONT_MONO))
-        else:
-            scroll = ScrollView()
-            col = BoxLayout(orientation="vertical", size_hint_y=None, spacing=6)
-            col.bind(minimum_height=col.setter("height"))
-            for note in trashed:
-                row = BoxLayout(size_hint_y=None, height="46dp", spacing=6)
-                lbl = Label(
-                    text=note["title"] or "Senza titolo",
-                    font_name=theme.FONT_MONO,
-                    halign="left",
-                    valign="middle",
-                    shorten=True,
+        if not self.flush():
+            return
+        notes = self.store.list_notes(trashed=True)
+        actions = [(note.title, lambda nid=note.id: self._trash_actions(nid)) for note in notes]
+        if notes:
+            actions.append(
+                (
+                    "Svuota cestino…",
+                    lambda: self.confirm(
+                        "Svuota cestino",
+                        "Eliminare definitivamente tutte le note del cestino?",
+                        self._empty_trash,
+                        "Elimina",
+                    ),
                 )
-                lbl.bind(size=lambda l, s: setattr(l, "text_size", s))
-                row.add_widget(lbl)
-                rb = Button(
-                    text="Ripristina", font_name=theme.FONT_TITLE,
-                    size_hint_x=None, width="120dp",
-                )
-                xb = Button(
-                    text="Elimina", font_name=theme.FONT_TITLE,
-                    size_hint_x=None, width="100dp",
-                )
-                rb.bind(on_release=lambda *_, i=note["id"]: (
-                    self.store.restore(i), popup.dismiss(),
-                    self.refresh_list(), self.open_trash(),
-                ))
-                xb.bind(on_release=lambda *_, i=note["id"]: (
-                    self.store.delete(i), popup.dismiss(), self.open_trash(),
-                ))
-                row.add_widget(rb)
-                row.add_widget(xb)
-                col.add_widget(row)
-            scroll.add_widget(col)
-            box.add_widget(scroll)
+            )
+        self._actions("Cestino", actions, "" if notes else "Il cestino è vuoto.")
 
-        bottom = BoxLayout(size_hint_y=None, height="46dp", spacing=8)
-        if trashed:
-            eb = Button(text="Svuota cestino", font_name=theme.FONT_TITLE)
-            eb.bind(on_release=lambda *_: (
-                popup.dismiss(),
-                self.confirm(
-                    "Svuotare il cestino? L'azione non è reversibile.",
-                    lambda: (self.store.empty_trash(), self.flash("Cestino svuotato")),
+    def _trash_actions(self, note_id: int):
+        note = self.store.get(note_id)
+        if note is None:
+            return
+        self._actions(
+            note.title,
+            [
+                ("Ripristina", lambda: self._storage_action(lambda: self._restore_note(note_id))),
+                (
+                    "Elimina definitivamente…",
+                    lambda: self.confirm(
+                        "Elimina nota",
+                        "La nota verrà eliminata definitivamente.",
+                        lambda: self._delete_note(note_id),
+                        "Elimina",
+                    ),
                 ),
-            ))
-            bottom.add_widget(eb)
-        cb = Button(text="Chiudi", font_name=theme.FONT_TITLE)
-        cb.bind(on_release=popup.dismiss)
-        bottom.add_widget(cb)
-        box.add_widget(bottom)
-        popup.open()
+            ],
+        )
+
+    def _restore_note(self, note_id):
+        self.store.set_trashed(note_id, False)
+        if self._undo_id == note_id:
+            self._expire_undo()
+        self.refresh_list()
+        self.open_editor(note_id)
+
+    def _delete_note(self, note_id):
+        self.store.delete_forever(note_id)
+        if self._undo_id == note_id:
+            self._expire_undo()
+        self.open_trash()
+
+    def _empty_trash(self):
+        self.store.delete_forever()
+        self._expire_undo()
+        self.open_trash()
+
+    def share_note(self):
+        text = self.session.text
+        if not text.strip():
+            self.show_message("La nota è vuota.")
+        elif self.documents:
+            self.documents.share(text)
+        else:
+            Clipboard.copy(text)
+            self.show_message("Nota copiata negli appunti.")
+
+    # Snapshot exports and complete validation happen before any import writes.
+    def export_notes(self):
+        if not self.flush():
+            return
+
+        def export():
+            data = export_backup(self.store)
+            name = time.strftime("purenote-%Y%m%d-%H%M%S.json")
+            if self.documents:
+                self.documents.export(name, data, lambda: self.show_message("Backup esportato."))
+            else:
+                self._desktop_file_dialog(save_data=data, name=name)
+
+        self._storage_action(export)
+
+    def restore_notes(self):
+        if not self.flush():
+            return
+        if self.documents:
+            self.documents.restore(self._preview_restore)
+        else:
+            self._desktop_file_dialog()
+
+    def _preview_restore(self, data: bytes):
+        try:
+            notes = read_backup(data)
+        except ValueError as error:
+            self.show_message(str(error))
+            return
+        if not notes:
+            self.show_message("Il backup non contiene note.")
+            return
+
+        def restore():
+            if not self.flush():
+                return
+            count = self.store.import_notes(notes)
+            self.refresh_list()
+            self.show_message(f"Ripristinate {count} note.")
+
+        self.confirm(
+            "Ripristina backup",
+            f"Aggiungere {len(notes)} note, incluso il cestino?\n\n"
+            "Le note presenti verranno conservate. Importare lo stesso backup "
+            "più volte crea copie aggiuntive.",
+            restore,
+            "Ripristina",
+        )
+
+    def _desktop_file_dialog(self, save_data: bytes | None = None, name=""):
+        box = BoxLayout(orientation="vertical", spacing=dp(8))
+        chooser = FileChooserListView(
+            path=str(Path(self.store.path).resolve().parent),
+            filters=[] if save_data is not None else ["*.json"],
+        )
+        box.add_widget(chooser)
+        filename = NoteInput(text=name, multiline=False, size_hint_y=None, height=dp(48))
+        if save_data is not None:
+            box.add_widget(filename)
+        popup = self._dialog(
+            "Esporta backup" if save_data is not None else "Apri backup", box, height=0.9
+        )
+
+        def choose():
+            try:
+                if save_data is not None:
+                    if not filename.text.strip() or Path(filename.text).name != filename.text:
+                        raise ValueError("Inserisci un nome file senza cartelle.")
+                    target = Path(chooser.path) / filename.text
+                    # Never silently replace another backup.
+                    with target.open("xb") as stream:
+                        stream.write(save_data)
+                    popup.dismiss()
+                    self.show_message("Backup esportato.")
+                elif chooser.selection:
+                    with Path(chooser.selection[0]).open("rb") as stream:
+                        data = stream.read(MAX_BACKUP_BYTES + 1)
+                    popup.dismiss()
+                    self._preview_restore(data)
+            except (OSError, ValueError) as error:
+                self.show_message(str(error))
+
+        box.add_widget(
+            self._button("Esporta" if save_data is not None else "Apri", choose, primary=True)
+        )
+        box.add_widget(self._button("Annulla", popup.dismiss))
 
 
 if __name__ == "__main__":

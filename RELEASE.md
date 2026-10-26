@@ -1,56 +1,58 @@
-# Pubblicare PureNote (Release AAB firmato)
+# AAB di PureNote
 
-Il workflow `.github/workflows/build-release.yml` produce l'**Android App Bundle
-(.aab)** firmato da caricare sul Play Store. Si avvia manualmente
-(*Actions → Build PureNote Release AAB → Run workflow*) o pushando un tag
-versione (`git tag v2.1 && git push origin v2.1`).
+Il workflow **Build PureNote Release AAB** prepara il bundle per il Play Store.
+Esegue gli stessi controlli dell’APK e compila per `arm64-v8a` e `armeabi-v7a`.
+Non pubblica automaticamente il bundle.
 
-## 1. Genera il keystore (una sola volta)
+## Firma
 
-Crea la chiave di firma in locale e **conservala al sicuro** (se la perdi non
-puoi più aggiornare l'app sul Play Store):
+Per aggiornare l’app già pubblicata, usa il keystore di upload esistente e mantieni
+l’application ID `bbnss.test.purenote`. Non sostituire la chiave con una nuova
+senza aver completato l’eventuale procedura di cambio chiave nella Play Console.
 
+Configura questi repository secret in **Settings → Secrets and variables → Actions**:
+
+| Secret | Contenuto |
+| --- | --- |
+| `ANDROID_KEYSTORE_B64` | File keystore codificato in base64 |
+| `ANDROID_KEYSTORE_PASSWORD` | Password del keystore |
+| `ANDROID_KEY_ALIAS` | Alias della chiave |
+| `ANDROID_KEY_PASSWORD` | Password della chiave |
+
+Su Linux puoi produrre la codifica con `base64 -w 0 percorso/chiave.keystore`.
+Conserva il file originale e le credenziali fuori dal repository.
+Il workflow decodifica la chiave in una cartella temporanea del runner e la rimuove
+anche quando la build fallisce.
+
+## Compilazione
+
+Dopo il push autorizzato, apri **Actions → Build PureNote Release AAB → Run workflow**.
+In alternativa, il workflow parte con un tag `v*`. L’artifact si chiama
+`purenote-release-aab-signed` se il keystore è configurato; senza chiave viene
+prodotto `purenote-release-aab-unsigned`, utile per verificare la compilazione
+ma non caricabile sul Play Store.
+
+La prima build della toolchain aggiornata va ancora convalidata su GitHub.
+Prima di pubblicare, prova l’APK su Android: tastiera e barre di sistema,
+background/riapertura, aggiornamento con dati esistenti, selettore file,
+condivisione, backup e ripristino. Verifica poi i controlli della Play Console.
+
+Ogni nuovo upload richiede un `android.numeric_version` strettamente maggiore
+in `buildozer.spec`. Questa revisione usa `version = 3.0` e
+`android.numeric_version = 10216`, successivo al precedente 10215.
+
+## Compilazione locale facoltativa
+
+Con le dipendenze di sistema elencate nell’action Android condivisa:
+
+```bash
+python3.11 -m venv .build-venv
+.build-venv/bin/python -m pip install -r requirements-build.txt
+.build-venv/bin/buildozer -v android debug
+.build-venv/bin/buildozer -v android release
 ```
-keytool -genkey -v \
-  -keystore purenote-release.keystore \
-  -alias purenote \
-  -keyalg RSA -keysize 2048 -validity 10000
-```
 
-Ti chiederà una password (store) e i tuoi dati. Annota:
-- password del keystore
-- alias (`purenote`)
-- password dell'alias (può coincidere con quella del keystore)
-
-## 2. Imposta i secret su GitHub
-
-Converti il keystore in base64:
-
-```
-base64 -i purenote-release.keystore | pbcopy   # macOS, copia negli appunti
-```
-
-Poi su GitHub: *Settings → Secrets and variables → Actions → New repository
-secret* e crea:
-
-| Secret | Valore |
-|---|---|
-| `ANDROID_KEYSTORE_B64` | il base64 del keystore (passo sopra) |
-| `ANDROID_KEYSTORE_PASSWORD` | password del keystore |
-| `ANDROID_KEY_ALIAS` | `purenote` |
-| `ANDROID_KEY_PASSWORD` | password dell'alias |
-
-> Senza questi secret il workflow gira lo stesso ma produce un AAB **non
-> firmato**, utile solo a validare la build (non caricabile sul Play Store).
-
-## 3. Avvia la build e scarica l'AAB
-
-Lancia il workflow; al termine scarica l'artifact `purenote-release-aab`
-(contiene `bin/*.aab`) e caricalo nella Play Console.
-
-## Note
-- Il release builda **entrambe le architetture** (`arm64-v8a` + `armeabi-v7a`);
-  il Play Store serve poi la ABI giusta a ciascun dispositivo. La build di
-  debug resta solo `arm64-v8a` per velocità.
-- Incrementa `version` in `buildozer.spec` ad ogni release (la Play Console
-  rifiuta due upload con lo stesso version code).
+Il release locale richiede le variabili `P4A_RELEASE_KEYSTORE`,
+`P4A_RELEASE_KEYSTORE_PASSWD`, `P4A_RELEASE_KEYALIAS` e `P4A_RELEASE_KEYALIAS_PASSWD`
+per firmare il bundle. Le architetture locali sono quelle di `buildozer.spec`;
+il workflow GitHub seleziona entrambe le ABI per il release.

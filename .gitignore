@@ -1,4 +1,5 @@
 .venv/
+.build-venv/
 __pycache__/
 *.pyc
 *.bak
@@ -9,3 +10,10 @@ PureNote_export/
 .buildozer/
 bin/
 .DS_Store
+.pytest_cache/
+.ruff_cache/
+*.db-wal
+*.db-shm
+*.keystore
+*.jks
+build.log

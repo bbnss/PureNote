@@ -1,64 +1,52 @@
 name: Build PureNote APK
-
 on:
   push:
-    branches: ["**"]
+    branches: ['**']
+  pull_request:
   workflow_dispatch:
-
+permissions:
+  contents: read
+concurrency:
+  group: apk-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
+  checks:
+    uses: ./.github/workflows/test.yml
   build-android:
-    runs-on: ubuntu-22.04
+    needs: checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      PYTHONFORANDROID_PREREQUISITES_INSTALL_INTERACTIVE: '0'
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-
-      - name: Install system dependencies
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/android-build
+      - name: Restore optional persistent debug signing key
+        shell: bash
+        env:
+          ANDROID_DEBUG_KEYSTORE_B64: ${{ secrets.ANDROID_DEBUG_KEYSTORE_B64 }}
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            git zip unzip openjdk-17-jdk python3-pip autoconf libtool \
-            pkg-config zlib1g-dev libncurses5-dev libncursesw5-dev \
-            libtinfo5 cmake libffi-dev libssl-dev build-essential \
-            ccache libltdl-dev
-
-      - name: Install buildozer
-        run: |
-          python -m pip install --upgrade pip
-          pip install --upgrade buildozer
-          pip install "cython==0.29.36"
-
-      # Restore the most recent cache for this spec (SDK/NDK + compiled bundle).
-      # A unique save key per run + prefix restore-keys means progress
-      # accumulates even across failed builds.
-      # ~/.android holds the debug.keystore: persisting it keeps the signing
-      # key stable across builds, so new debug APKs install over the previous
-      # one without "signatures do not match" / uninstall.
-      - name: Restore buildozer cache
-        uses: actions/cache/restore@v4
-        with:
-          path: |
-            ~/.buildozer
-            ~/.android
-            .buildozer
-          key: buildozer-v3-${{ hashFiles('buildozer.spec') }}-${{ github.run_id }}
-          restore-keys: |
-            buildozer-v3-${{ hashFiles('buildozer.spec') }}-
-
+          if [ -n "$ANDROID_DEBUG_KEYSTORE_B64" ]; then
+            mkdir -p "$HOME/.android"
+            printf '%s' "$ANDROID_DEBUG_KEYSTORE_B64" | base64 --decode > "$HOME/.android/debug.keystore"
+            chmod 600 "$HOME/.android/debug.keystore"
+          fi
       - name: Build debug APK
-        run: buildozer android debug
-
-      - name: Save buildozer cache
+        shell: bash
+        run: buildozer -v android debug 2>&1 | tee build.log
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: purenote-debug-apk
+          path: bin/*.apk
+          if-no-files-found: error
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: purenote-apk-build-log
+          path: build.log
+      - name: Save build progress
         if: always()
         uses: actions/cache/save@v4
         with:
@@ -66,12 +54,4 @@ jobs:
             ~/.buildozer
             ~/.android
             .buildozer
-          key: buildozer-v3-${{ hashFiles('buildozer.spec') }}-${{ github.run_id }}
-
-      - name: Upload APK artifact
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: purenote-debug-apk
-          path: bin/*.apk
-          if-no-files-found: error
+          key: purenote-android-v4-${{ runner.os }}-${{ hashFiles('buildozer.spec', 'requirements-build.txt') }}-${{ github.run_id }}-${{ github.run_attempt }}
