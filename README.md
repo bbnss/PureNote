@@ -73,6 +73,9 @@ SDK 36, NDK 28c e Android minimo 7.0 (API 24). La prima compilazione con questa
 configurazione deve essere validata su GitHub; i test locali non dimostrano che
 l’APK compili o funzioni su dispositivo.
 
+`constraints-android.txt` mantiene lo stesso vincolo sulle dipendenze sia nel
+risolutore Android sia nell’installazione dei moduli Python.
+
 La cache riusa SDK, NDK, compilazioni parziali e chiave debug. Per una chiave debug
 stabile anche dopo la scadenza della cache, puoi impostare il secret opzionale
 `ANDROID_DEBUG_KEYSTORE_B64`. L’APK debug è per le prove: per aggiornare

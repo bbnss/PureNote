@@ -20,6 +20,9 @@ runs:
     - name: Install pinned Buildozer toolchain
       shell: bash
       run: python -m pip install -r requirements-build.txt
+    - name: Constrain both p4a dependency resolution and installation
+      shell: bash
+      run: echo "PIP_CONSTRAINT=$GITHUB_WORKSPACE/constraints-android.txt" >> "$GITHUB_ENV"
     - name: Restore Buildozer cache
       uses: actions/cache/restore@v4
       with:
@@ -27,9 +30,9 @@ runs:
           ~/.buildozer
           ~/.android
           .buildozer
-        key: purenote-android-v4-${{ runner.os }}-${{ hashFiles('buildozer.spec', 'requirements-build.txt') }}-${{ github.run_id }}-${{ github.run_attempt }}
+        key: purenote-android-v4-${{ runner.os }}-${{ hashFiles('buildozer.spec', 'requirements-build.txt', 'constraints-android.txt') }}-${{ github.run_id }}-${{ github.run_attempt }}
         restore-keys: |
-          purenote-android-v4-${{ runner.os }}-${{ hashFiles('buildozer.spec', 'requirements-build.txt') }}-
+          purenote-android-v4-${{ runner.os }}-${{ hashFiles('buildozer.spec', 'requirements-build.txt', 'constraints-android.txt') }}-
           purenote-android-v4-${{ runner.os }}-
           buildozer-v3-
     - name: Recreate disposable p4a installer environments

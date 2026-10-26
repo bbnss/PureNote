@@ -48,6 +48,7 @@ Con le dipendenze di sistema elencate nell’action Android condivisa:
 ```bash
 python3.11 -m venv .build-venv
 .build-venv/bin/python -m pip install -r requirements-build.txt
+export PIP_CONSTRAINT="$PWD/constraints-android.txt"
 .build-venv/bin/buildozer -v android debug
 .build-venv/bin/buildozer -v android release
 ```

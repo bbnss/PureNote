@@ -54,4 +54,4 @@ jobs:
             ~/.buildozer
             ~/.android
             .buildozer
-          key: purenote-android-v4-${{ runner.os }}-${{ hashFiles('buildozer.spec', 'requirements-build.txt') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          key: purenote-android-v4-${{ runner.os }}-${{ hashFiles('buildozer.spec', 'requirements-build.txt', 'constraints-android.txt') }}-${{ github.run_id }}-${{ github.run_attempt }}
