@@ -181,7 +181,7 @@
                 size_hint_y: None
                 height: max(dp(36), font(25) + dp(8))
                 Label:
-                    text: 'Le tue note'
+                    text: 'Note'
                     font_name: t.FONT_BODY
                     font_size: font(25)
                     color: t.TEXT
@@ -190,6 +190,7 @@
                     shorten: True
                 QuietLabel:
                     text: root.summary
+                    text_size: None, None
                     size_hint_x: None
                     width: max(dp(56), self.texture_size[0])
                     halign: 'right'
