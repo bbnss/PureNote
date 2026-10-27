@@ -1,12 +1,47 @@
 name: Build PureNote Release AAB
 on:
   workflow_dispatch:
+    inputs:
+      signing_check_only:
+        description: 'Read only the public certificate of the existing signing key'
+        type: boolean
+        default: false
   push:
     tags: ['v*']
 permissions:
   contents: read
 jobs:
+  signing-check:
+    if: inputs.signing_check_only == true
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Inspect the existing signing certificate
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          for variable in ANDROID_KEYSTORE_B64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS; do
+            if [ -z "${!variable}" ]; then
+              echo "::error::Missing $variable"
+              exit 1
+            fi
+          done
+          key_path="$RUNNER_TEMP/purenote-inspect.keystore"
+          cert_path="$RUNNER_TEMP/purenote-public-cert.der"
+          trap 'rm -f "$key_path" "$cert_path"' EXIT
+          umask 077
+          printf '%s' "$ANDROID_KEYSTORE_B64" | base64 --decode > "$key_path"
+          keytool -exportcert -keystore "$key_path" -alias "$ANDROID_KEY_ALIAS" \
+            -storepass:env ANDROID_KEYSTORE_PASSWORD -file "$cert_path"
+          echo "Existing signing certificate SHA-256: $(sha256sum "$cert_path" | cut -d ' ' -f 1)"
   checks:
+    if: inputs.signing_check_only != true
     uses: ./.github/workflows/test.yml
   build-release:
     needs: checks
