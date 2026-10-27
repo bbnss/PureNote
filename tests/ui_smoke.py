@@ -33,6 +33,7 @@ class SmokeApp(PureNoteApp):
                 self.autosaved,
                 self.editor_capture,
                 self.failure_and_retry,
+                self.save_error_capture,
                 self.navigation,
                 self.list_capture,
                 self.trash_and_restore,
@@ -81,7 +82,7 @@ class SmokeApp(PureNoteApp):
         self.root.export_to_png(str(OUTPUT / "editor.png"))
 
     def failure_and_retry(self):
-        real_save = self.store.save_note
+        self.real_save = self.store.save_note
 
         def fail(*_):
             raise sqlite3.OperationalError("simulated disk full")
@@ -93,7 +94,11 @@ class SmokeApp(PureNoteApp):
         assert self.session.dirty
         assert self.editor.save_error
         self._popup.dismiss()
-        self.store.save_note = real_save
+
+    def save_error_capture(self):
+        self.assert_editor_layout()
+        self.root.export_to_png(str(OUTPUT / "save-error.png"))
+        self.store.save_note = self.real_save
         self.editor.ids.body.text = self.editor.ids.body.text.removesuffix(
             "\nUna modifica preziosa."
         )
@@ -110,6 +115,9 @@ class SmokeApp(PureNoteApp):
         assert len(self.store.list_notes()) == 2
 
     def list_capture(self):
+        notes = self.root.get_screen("list").ids.notes
+        assert notes.pos == notes.parent.pos
+        assert notes.top == notes.parent.top
         self.root.export_to_png(str(OUTPUT / "list.png"))
         self.set_query("DOMANI")
         self.refresh_list()

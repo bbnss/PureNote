@@ -206,6 +206,7 @@
         FloatLayout:
             RecycleView:
                 id: notes
+                pos_hint: {'x': 0, 'y': 0}
                 viewclass: 'NoteRow'
                 bar_width: dp(3)
                 RecycleBoxLayout:
@@ -216,6 +217,7 @@
                     orientation: 'vertical'
             Label:
                 id: empty
+                pos_hint: {'x': 0, 'y': 0}
                 text: root.empty_message
                 font_name: t.FONT_BODY
                 font_size: '17sp'
