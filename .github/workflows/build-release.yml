@@ -1,0 +1,47 @@
+name: Build PureNote Release AAB
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+jobs:
+  checks:
+    uses: ./.github/workflows/test.yml
+  build-release:
+    needs: checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      PYTHONFORANDROID_PREREQUISITES_INSTALL_INTERACTIVE: '0'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select release architectures before computing the cache key
+        run: sed -i 's/^android.archs = .*/android.archs = arm64-v8a,armeabi-v7a/' buildozer.spec
+      - uses: ./.github/actions/android-build
+      - name: Build release AAB and APK for local signing
+        shell: bash
+        run: |
+          buildozer -v android release
+          buildozer --profile release-apk -v android release
+      - name: Upload AAB for local signing
+        uses: actions/upload-artifact@v4
+        with:
+          name: purenote-release-aab-for-local-signing
+          path: bin/*.aab
+          if-no-files-found: error
+      - name: Upload APK for local signing
+        uses: actions/upload-artifact@v4
+        with:
+          name: purenote-release-apk-for-local-signing
+          path: bin/*.apk
+          if-no-files-found: error
+      - name: Save build progress
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.buildozer
+            ~/.android
+            .buildozer
+          key: purenote-android-v4-${{ runner.os }}-${{ hashFiles('buildozer.spec', 'requirements-build.txt', 'constraints-android.txt') }}-${{ github.run_id }}-${{ github.run_attempt }}

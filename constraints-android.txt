@@ -1,0 +1,3 @@
+# p4a's resolver strips requirement versions before its cross-platform dry-run.
+# This release provides a universal Python wheel instead of an Android extension.
+charset-normalizer==3.4.2

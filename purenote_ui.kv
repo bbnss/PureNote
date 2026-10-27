@@ -1,0 +1,316 @@
+#:import t theme
+#:import dp kivy.metrics.dp
+#:import font theme.font
+#:import NoTransition kivy.uix.screenmanager.NoTransition
+
+<QuietButton>:
+    font_name: t.FONT_BODY
+    font_size: font(15)
+    color: t.BG if self.primary else (t.DANGER if self.danger else t.ACCENT)
+    disabled_color: t.MUTED
+    size_hint_y: None
+    height: max(dp(48), font(15) + dp(28))
+    text_size: max(0, self.width - dp(24)), None
+    halign: 'center'
+    valign: 'middle'
+    shorten: True
+    shorten_from: 'right'
+    canvas.before:
+        Color:
+            rgba: t.ACCENT if self.primary else (t.LINE if self.state == 'down' else t.BUTTON)
+        RoundedRectangle:
+            pos: self.pos
+            size: self.size
+            radius: [dp(12)]
+
+<IconButton>:
+    text: ''
+    size_hint_x: None
+    width: self.height
+    canvas.after:
+        Color:
+            rgba: self.color
+        Line:
+            points: [self.center_x + dp(4), self.center_y + dp(7), self.center_x - dp(3), self.center_y, self.center_x + dp(4), self.center_y - dp(7)] if self.icon == 'back' else []
+            width: dp(1.4)
+        Ellipse:
+            pos: self.center_x - dp(2), self.center_y - dp(2)
+            size: (dp(4), dp(4)) if self.icon == 'menu' else (0, 0)
+        Ellipse:
+            pos: self.center_x - dp(2), self.center_y + dp(6)
+            size: (dp(4), dp(4)) if self.icon == 'menu' else (0, 0)
+        Ellipse:
+            pos: self.center_x - dp(2), self.center_y - dp(10)
+            size: (dp(4), dp(4)) if self.icon == 'menu' else (0, 0)
+
+<NoteInput>:
+    background_normal: ''
+    background_active: ''
+    background_color: t.BG
+    foreground_color: t.TEXT
+    hint_text_color: t.MUTED
+    cursor_color: t.ACCENT
+    cursor_width: dp(2)
+    selection_color: (0.3, 0.6, 0.4, 0.35)
+    font_name: t.FONT_BODY
+    font_size: font(18)
+    padding: [dp(24), dp(20)]
+    write_tab: False
+
+<QuietLabel@Label>:
+    font_name: t.FONT_BODY
+    font_size: font(12)
+    color: t.MUTED
+    halign: 'left'
+    valign: 'middle'
+    text_size: self.width, None
+    shorten: True
+    shorten_from: 'right'
+
+<TopBar@BoxLayout>:
+    size_hint_y: None
+    height: max(dp(48), font(15) + dp(28)) + dp(24)
+    padding: [dp(16), dp(12)]
+    spacing: dp(12)
+
+<Wordmark@Label>:
+    text: 'PURENOTE'
+    font_name: t.FONT_RETRO
+    font_size: min(dp(23), self.width / 5.8)
+    color: t.ACCENT
+    halign: 'left'
+    valign: 'middle'
+    text_size: self.width, None
+    shorten: True
+
+<Divider@Widget>:
+    size_hint_y: None
+    height: dp(1)
+    canvas:
+        Color:
+            rgba: t.LINE
+        Rectangle:
+            pos: self.pos
+            size: self.size
+
+<Counter@BoxLayout>:
+    value: '0'
+    caption: ''
+    orientation: 'vertical'
+    size_hint_y: None
+    height: max(dp(46), font(22) + font(16) + dp(4))
+    spacing: dp(4)
+    Label:
+        text: root.value
+        size_hint_y: None
+        height: font(22)
+        font_name: t.FONT_MONO
+        font_size: font(15)
+        color: t.TEXT
+        text_size: max(0, self.width - dp(8)), None
+        shorten: True
+        halign: 'center'
+        valign: 'middle'
+    Label:
+        text: root.caption
+        size_hint_y: None
+        height: font(16)
+        font_name: t.FONT_BODY
+        font_size: font(11)
+        color: t.MUTED
+        text_size: max(0, self.width - dp(8)), None
+        shorten: True
+        halign: 'center'
+        valign: 'middle'
+
+<NoteRow>:
+    orientation: 'vertical'
+    size_hint_y: None
+    height: max(dp(112), font(24) + font(22) + font(16) + dp(44))
+    padding: [dp(24), dp(16)]
+    spacing: dp(6)
+    canvas.before:
+        Color:
+            rgba: t.PANEL if self.state == 'down' else t.BG
+        Rectangle:
+            pos: self.pos
+            size: self.size
+        Color:
+            rgba: t.LINE
+        Rectangle:
+            pos: self.x + dp(24), self.y
+            size: max(0, self.width - dp(48)), dp(1)
+    Label:
+        text: root.title
+        font_name: t.FONT_BODY
+        font_size: font(18)
+        color: t.TEXT
+        halign: 'left'
+        valign: 'middle'
+        text_size: self.width, None
+        shorten: True
+        shorten_from: 'right'
+        size_hint_y: None
+        height: font(24)
+    QuietLabel:
+        text: root.snippet if root.snippet else 'Nessun altro testo'
+        font_size: font(14)
+    QuietLabel:
+        text: root.date
+        font_name: t.FONT_MONO
+        font_size: font(11)
+        size_hint_y: None
+        height: font(16)
+
+<ListScreen>:
+    BoxLayout:
+        orientation: 'vertical'
+        padding: app.insets
+        TopBar:
+            Wordmark:
+            IconButton:
+                icon: 'menu'
+                on_release: app.open_menu()
+        BoxLayout:
+            orientation: 'vertical'
+            size_hint_y: None
+            height: self.minimum_height
+            padding: [dp(24), dp(8), dp(24), dp(16)]
+            spacing: dp(16)
+            BoxLayout:
+                size_hint_y: None
+                height: max(dp(36), font(25) + dp(8))
+                Label:
+                    text: 'Note'
+                    font_name: t.FONT_BODY
+                    font_size: font(25)
+                    color: t.TEXT
+                    text_size: self.width, None
+                    halign: 'left'
+                    shorten: True
+                Label:
+                    id: note_total
+                    text: root.summary
+                    font_name: t.FONT_BODY
+                    font_size: font(12)
+                    color: t.MUTED
+                    text_size: None, None
+                    size_hint_x: None
+                    width: max(dp(56), self.texture_size[0])
+                    halign: 'right'
+            NoteInput:
+                id: search
+                hint_text: 'Cerca nelle note'
+                multiline: False
+                font_size: font(16)
+                size_hint_y: None
+                height: max(dp(52), self.minimum_height)
+                padding: [dp(16), dp(16)]
+                background_color: t.PANEL
+                on_text: app.set_query(self.text)
+        FloatLayout:
+            RecycleView:
+                id: notes
+                pos_hint: {'x': 0, 'y': 0}
+                viewclass: 'NoteRow'
+                bar_width: dp(3)
+                RecycleBoxLayout:
+                    default_size: None, max(dp(112), font(24) + font(22) + font(16) + dp(44))
+                    default_size_hint: 1, None
+                    size_hint_y: None
+                    height: self.minimum_height
+                    orientation: 'vertical'
+            Label:
+                id: empty
+                pos_hint: {'x': 0, 'y': 0}
+                text: root.empty_message
+                font_name: t.FONT_BODY
+                font_size: font(17)
+                color: t.MUTED
+                halign: 'center'
+                valign: 'middle'
+                text_size: max(0, self.width - dp(48)), self.height
+        BoxLayout:
+            orientation: 'vertical'
+            size_hint_y: None
+            height: self.minimum_height
+            padding: [dp(24), dp(12), dp(24), dp(16)]
+            spacing: dp(8)
+            QuietButton:
+                id: undo
+                text: 'Nota nel cestino · Annulla'
+                disabled: True
+                opacity: 0 if self.disabled else 1
+                height: 0 if self.disabled else max(dp(48), font(15) + dp(28))
+                on_release: app.undo_trash()
+            QuietButton:
+                text: '+  Nuova nota'
+                primary: True
+                on_release: app.new_note()
+
+<EditorScreen>:
+    BoxLayout:
+        orientation: 'vertical'
+        padding: app.insets
+        TopBar:
+            id: toolbar
+            IconButton:
+                icon: 'back'
+                on_release: app.go_list()
+            Wordmark:
+                halign: 'center'
+            IconButton:
+                icon: 'menu'
+                on_release: app.open_menu()
+        Divider:
+        NoteInput:
+            id: body
+            hint_text: 'Scrivi qui…'
+            line_spacing: dp(5)
+            on_text: root.on_text_changed(self.text)
+        Divider:
+        BoxLayout:
+            orientation: 'vertical'
+            size_hint_y: None
+            id: footer
+            height: self.minimum_height
+            padding: [dp(16), dp(12), dp(16), dp(8)]
+            spacing: dp(8)
+            BoxLayout:
+                size_hint_y: None
+                height: max(dp(46), font(22) + font(16) + dp(4))
+                Counter:
+                    value: root.words
+                    caption: 'parole'
+                Counter:
+                    value: root.characters
+                    caption: 'caratteri'
+                Counter:
+                    value: root.tokens
+                    caption: 'token ≈'
+            QuietLabel:
+                text: root.status if not root.save_error else ''
+                size_hint_y: None
+                height: 0 if root.save_error else max(dp(24), font(12) + dp(8))
+                halign: 'center'
+            QuietButton:
+                text: 'Salvataggio fallito · Riprova'
+                font_size: font(13)
+                danger: True
+                disabled: not root.save_error
+                opacity: 1 if root.save_error else 0
+                height: max(dp(48), font(13) + dp(28)) if root.save_error else 0
+                on_release: app.flush()
+
+RootManager:
+    transition: NoTransition()
+    canvas.before:
+        Color:
+            rgba: t.BG
+        Rectangle:
+            pos: self.pos
+            size: self.size
+    EditorScreen:
+        name: 'editor'
+    ListScreen:
+        name: 'list'

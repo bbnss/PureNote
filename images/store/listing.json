@@ -1,0 +1,60 @@
+{
+  "locales": {
+    "it-IT": {
+      "title": "PureNote: note offline",
+      "shortDescription": "Note offline, salvataggio automatico e backup. Stile rétro, senza account.",
+      "fullDescription": "Uno spazio tranquillo per le tue idee. PureNote è un’app per prendere appunti offline, con un’interfaccia scura dal gusto rétro e un unico campo in cui scrivere.\n\nSCRIVI E RITROVA\nPrendi appunti, raccogli idee e prepara piccoli promemoria. La prima riga diventa il titolo della nota. Il testo si salva automaticamente e all’apertura ritrovi l’ultima nota. Cerca nel contenuto e consulta le note in ordine di ultima modifica.\n\nTIENI D’OCCHIO IL TESTO\nParole e caratteri si aggiornano mentre scrivi. Il contatore dei token è una stima indicativa, non un conteggio specifico per un modello AI.\n\nSCEGLI COSA CONSERVARE\nSposta le note nel cestino e ripristinale quando serve. Esporta un backup JSON nella posizione che scegli e importa una copia senza sostituire le note esistenti. Ripristinare lo stesso backup più volte crea duplicati. Puoi condividere il testo con le altre app tramite il menu Android.\n\nSUL TUO DISPOSITIVO\nPureNote funziona senza connessione e senza account. Non contiene pubblicità e non richiede permessi generali per accedere alla memoria. Le note sono conservate nel database locale dell’app; non è incluso un servizio di sincronizzazione cloud. Il backup automatico Android è disabilitato: usa l’esportazione manuale per conservare una copia prima di disinstallare l’app o cambiare telefono.\n\nInterfaccia in italiano. Disponibile per Android 7.0 e versioni successive. Codice sorgente su GitHub: https://github.com/bbnss/PureNote"
+    },
+    "en-US": {
+      "title": "PureNote: Offline Notes",
+      "shortDescription": "Write notes offline with autosave, search and manual backups. No account needed.",
+      "fullDescription": "A quiet place for your ideas. PureNote is an offline note-taking app with a dark, retro-inspired interface and one simple writing field.\n\nWRITE AND FIND YOUR NOTES\nCapture thoughts, drafts and everyday reminders. The first line becomes the note title. Your text saves automatically, and the app reopens your last note. Search note content and browse notes sorted by their last edit.\n\nFOLLOW YOUR WRITING\nWord and character counts update as you type. The token counter is an approximate estimate, not a model-specific AI token count.\n\nKEEP A COPY\nMove notes to the trash and restore them when needed. Export a JSON backup to a location you choose. Importing adds copies and keeps your existing notes; importing the same backup again creates duplicates. Share note text with other apps through Android’s share menu.\n\nON YOUR DEVICE\nPureNote works without an internet connection or an account. There are no ads and no broad storage permissions. Notes are stored in the app’s local database; no cloud sync service is included. Android automatic backup is disabled, so export a manual backup before uninstalling the app or switching phones.\n\nThe interface is currently in Italian, as shown in the screenshots. Requires Android 7.0 or later. Source code: https://github.com/bbnss/PureNote"
+    }
+  },
+  "images": [
+    {
+      "locale": "it-IT",
+      "imageType": "phoneScreenshots",
+      "paths": [
+        "it-IT/01-editor.png",
+        "it-IT/02-list.png"
+      ]
+    },
+    {
+      "locale": "it-IT",
+      "imageType": "icon",
+      "paths": [
+        "it-IT/icon.png"
+      ]
+    },
+    {
+      "locale": "it-IT",
+      "imageType": "featureGraphic",
+      "paths": [
+        "it-IT/feature-graphic.png"
+      ]
+    },
+    {
+      "locale": "en-US",
+      "imageType": "phoneScreenshots",
+      "paths": [
+        "en-US/01-editor.png",
+        "en-US/02-list.png"
+      ]
+    },
+    {
+      "locale": "en-US",
+      "imageType": "icon",
+      "paths": [
+        "en-US/icon.png"
+      ]
+    },
+    {
+      "locale": "en-US",
+      "imageType": "featureGraphic",
+      "paths": [
+        "en-US/feature-graphic.png"
+      ]
+    }
+  ]
+}
