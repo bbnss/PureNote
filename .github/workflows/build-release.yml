@@ -6,6 +6,10 @@ on:
         description: 'Read only the public certificate of the existing signing key'
         type: boolean
         default: false
+      local_signing:
+        description: 'Build release APK and AAB for signing locally with the original key'
+        type: boolean
+        default: false
   push:
     tags: ['v*']
 permissions:
@@ -63,23 +67,32 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           ANDROID_UPLOAD_CERT_SHA256: ${{ vars.ANDROID_UPLOAD_CERT_SHA256 }}
+          PURENOTE_LOCAL_SIGNING: ${{ inputs.local_signing }}
         run: |
-          for variable in ANDROID_KEYSTORE_B64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD ANDROID_UPLOAD_CERT_SHA256; do
-            if [ -z "${!variable}" ]; then
-              echo "::error::Missing $variable; release requires the existing Play upload key and a confirmed certificate."
-              exit 1
-            fi
-          done
-          umask 077
-          printf '%s' "$ANDROID_KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/release.keystore"
-          export P4A_RELEASE_KEYSTORE="$RUNNER_TEMP/release.keystore"
-          export P4A_RELEASE_KEYSTORE_PASSWD="$ANDROID_KEYSTORE_PASSWORD"
-          export P4A_RELEASE_KEYALIAS="$ANDROID_KEY_ALIAS"
-          export P4A_RELEASE_KEYALIAS_PASSWD="$ANDROID_KEY_PASSWORD"
-          python tests/verify_signing.py --expected-sha256 "$ANDROID_UPLOAD_CERT_SHA256"
-          echo 'artifact=purenote-release-aab-signed' >> "$GITHUB_OUTPUT"
+          if [ "$PURENOTE_LOCAL_SIGNING" = 'true' ]; then
+            echo 'artifact=purenote-release-aab-for-local-signing' >> "$GITHUB_OUTPUT"
+          else
+            for variable in ANDROID_KEYSTORE_B64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD ANDROID_UPLOAD_CERT_SHA256; do
+              if [ -z "${!variable}" ]; then
+                echo "::error::Missing $variable; release requires the existing Play upload key and a confirmed certificate."
+                exit 1
+              fi
+            done
+            umask 077
+            printf '%s' "$ANDROID_KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/release.keystore"
+            export P4A_RELEASE_KEYSTORE="$RUNNER_TEMP/release.keystore"
+            export P4A_RELEASE_KEYSTORE_PASSWD="$ANDROID_KEYSTORE_PASSWORD"
+            export P4A_RELEASE_KEYALIAS="$ANDROID_KEY_ALIAS"
+            export P4A_RELEASE_KEYALIAS_PASSWD="$ANDROID_KEY_PASSWORD"
+            python tests/verify_signing.py --expected-sha256 "$ANDROID_UPLOAD_CERT_SHA256"
+            echo 'artifact=purenote-release-aab-signed' >> "$GITHUB_OUTPUT"
+          fi
           buildozer -v android release 2>&1 | tee build.log
-          python tests/verify_signing.py --expected-sha256 "$ANDROID_UPLOAD_CERT_SHA256" bin/*.aab
+          if [ "$PURENOTE_LOCAL_SIGNING" = 'true' ]; then
+            buildozer --profile release-apk -v android release 2>&1 | tee -a build.log
+          else
+            python tests/verify_signing.py --expected-sha256 "$ANDROID_UPLOAD_CERT_SHA256" bin/*.aab
+          fi
       - name: Remove temporary signing key
         if: always()
         run: rm -f "$RUNNER_TEMP/release.keystore"
@@ -95,6 +108,13 @@ jobs:
         with:
           name: purenote-aab-build-log
           path: build.log
+      - name: Upload APK for local signing
+        if: inputs.local_signing == true
+        uses: actions/upload-artifact@v4
+        with:
+          name: purenote-release-apk-for-local-signing
+          path: bin/*.apk
+          if-no-files-found: error
       - name: Save build progress
         if: always()
         uses: actions/cache/save@v4

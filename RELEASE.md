@@ -50,6 +50,15 @@ Keystore, credenziali, database e file di release restano ignorati da Git;
 l'APK ufficiale va allegato alla release GitHub, non aggiunto al codice.
 L'AAB rimane un artifact della build, da scaricare per il caricamento successivo.
 
+Se la password va inserita soltanto nel terminale locale, avvia il workflow con
+`local_signing = true`. In questa modalità vengono preparati APK e AAB release
+da firmare localmente: gli artifact si chiamano
+`purenote-release-apk-for-local-signing` e
+`purenote-release-aab-for-local-signing`. Non sono file ufficiali già firmati;
+prima della pubblicazione bisogna applicare la chiave originale e verificare
+nuovamente i certificati. Il profilo Buildozer `release-apk` seleziona l'APK
+senza modificare la configurazione AAB predefinita.
+
 ## Compilazione
 
 Dopo il push autorizzato, apri **Actions → Build PureNote Release AAB → Run workflow**.

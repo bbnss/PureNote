@@ -34,6 +34,9 @@ p4a.bootstrap = sdl2
 p4a.branch = master
 p4a.commit = 58d21141f17c889bf8585f5665921d72028f8831
 
+[app@release-apk]
+android.release_artifact = apk
+
 [buildozer]
 log_level = 2
 warn_on_root = 1
