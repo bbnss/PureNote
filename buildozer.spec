@@ -6,13 +6,16 @@ package.domain = bbnss.test
 source.dir = .
 source.include_exts = py,png,jpg,ttf,kv
 source.exclude_exts = bak,orig
-source.exclude_dirs = .venv,.build-venv,.git,.github,tests,images,__pycache__,PureNote_export,.pytest_cache,.ruff_cache
+source.exclude_dirs = .venv,.build-venv,.git,.github,tests,images,artwork,bin,secrets,__pycache__,PureNote_export,.pytest_cache,.ruff_cache
 version = 3.0.2
-android.numeric_version = 10218
+android.numeric_version = 10219
 # Avoid a transitive Android wheel that p4a's pure-Python install stage rejects.
 requirements = python3,kivy==2.3.1,sqlite3,pyjnius,charset_normalizer==3.4.2
 presplash.filename = %(source.dir)s/logo.png
 icon.filename = %(source.dir)s/logo.png
+icon.adaptive_foreground.filename = %(source.dir)s/artwork/icon-foreground.png
+icon.adaptive_background.filename = %(source.dir)s/artwork/icon-background.png
+android.presplash_color = #0C120F
 orientation = portrait
 fullscreen = 0
 

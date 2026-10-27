@@ -17,3 +17,16 @@ bin/
 *.keystore
 *.jks
 build.log
+*.aab
+*.apk
+*.apks
+*.idsig
+.env
+.env.*
+*.pem
+*.p12
+*.pfx
+secrets/
+credentials*.json
+*service-account*.json
+notes.db.*
