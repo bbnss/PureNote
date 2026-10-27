@@ -116,9 +116,12 @@ class SmokeApp(PureNoteApp):
         assert len(self.store.list_notes()) == 2
 
     def list_capture(self):
-        notes = self.root.get_screen("list").ids.notes
+        screen = self.root.get_screen("list")
+        notes = screen.ids.notes
         assert notes.pos == notes.parent.pos
         assert notes.top == notes.parent.top
+        assert not screen.ids.note_total.is_shortened
+        assert screen.ids.note_total.texture_size[1] <= screen.ids.note_total.height + 1
         self.root.export_to_png(str(OUTPUT / "list.png"))
         self.set_query("DOMANI")
         self.refresh_list()

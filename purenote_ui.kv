@@ -188,8 +188,12 @@
                     text_size: self.width, None
                     halign: 'left'
                     shorten: True
-                QuietLabel:
+                Label:
+                    id: note_total
                     text: root.summary
+                    font_name: t.FONT_BODY
+                    font_size: font(12)
+                    color: t.MUTED
                     text_size: None, None
                     size_hint_x: None
                     width: max(dp(56), self.texture_size[0])
