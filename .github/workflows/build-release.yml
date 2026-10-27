@@ -1,51 +1,12 @@
 name: Build PureNote Release AAB
 on:
   workflow_dispatch:
-    inputs:
-      signing_check_only:
-        description: 'Read only the public certificate of the existing signing key'
-        type: boolean
-        default: false
-      local_signing:
-        description: 'Build release APK and AAB for signing locally with the original key'
-        type: boolean
-        default: false
   push:
     tags: ['v*']
 permissions:
   contents: read
 jobs:
-  signing-check:
-    if: inputs.signing_check_only == true
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-      - name: Inspect the existing signing certificate
-        shell: bash
-        env:
-          ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-        run: |
-          for variable in ANDROID_KEYSTORE_B64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS; do
-            if [ -z "${!variable}" ]; then
-              echo "::error::Missing $variable"
-              exit 1
-            fi
-          done
-          key_path="$RUNNER_TEMP/purenote-inspect.keystore"
-          cert_path="$RUNNER_TEMP/purenote-public-cert.der"
-          trap 'rm -f "$key_path" "$cert_path"' EXIT
-          umask 077
-          printf '%s' "$ANDROID_KEYSTORE_B64" | base64 --decode > "$key_path"
-          keytool -exportcert -keystore "$key_path" -alias "$ANDROID_KEY_ALIAS" \
-            -storepass:env ANDROID_KEYSTORE_PASSWORD -file "$cert_path"
-          echo "Existing signing certificate SHA-256: $(sha256sum "$cert_path" | cut -d ' ' -f 1)"
   checks:
-    if: inputs.signing_check_only != true
     uses: ./.github/workflows/test.yml
   build-release:
     needs: checks
@@ -58,58 +19,18 @@ jobs:
       - name: Select release architectures before computing the cache key
         run: sed -i 's/^android.archs = .*/android.archs = arm64-v8a,armeabi-v7a/' buildozer.spec
       - uses: ./.github/actions/android-build
-      - name: Build release AAB
-        id: bundle
+      - name: Build release AAB and APK for local signing
         shell: bash
-        env:
-          ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-          ANDROID_UPLOAD_CERT_SHA256: ${{ vars.ANDROID_UPLOAD_CERT_SHA256 }}
-          PURENOTE_LOCAL_SIGNING: ${{ inputs.local_signing }}
         run: |
-          if [ "$PURENOTE_LOCAL_SIGNING" = 'true' ]; then
-            echo 'artifact=purenote-release-aab-for-local-signing' >> "$GITHUB_OUTPUT"
-          else
-            for variable in ANDROID_KEYSTORE_B64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD ANDROID_UPLOAD_CERT_SHA256; do
-              if [ -z "${!variable}" ]; then
-                echo "::error::Missing $variable; release requires the existing Play upload key and a confirmed certificate."
-                exit 1
-              fi
-            done
-            umask 077
-            printf '%s' "$ANDROID_KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/release.keystore"
-            export P4A_RELEASE_KEYSTORE="$RUNNER_TEMP/release.keystore"
-            export P4A_RELEASE_KEYSTORE_PASSWD="$ANDROID_KEYSTORE_PASSWORD"
-            export P4A_RELEASE_KEYALIAS="$ANDROID_KEY_ALIAS"
-            export P4A_RELEASE_KEYALIAS_PASSWD="$ANDROID_KEY_PASSWORD"
-            python tests/verify_signing.py --expected-sha256 "$ANDROID_UPLOAD_CERT_SHA256"
-            echo 'artifact=purenote-release-aab-signed' >> "$GITHUB_OUTPUT"
-          fi
-          buildozer -v android release 2>&1 | tee build.log
-          if [ "$PURENOTE_LOCAL_SIGNING" = 'true' ]; then
-            buildozer --profile release-apk -v android release 2>&1 | tee -a build.log
-          else
-            python tests/verify_signing.py --expected-sha256 "$ANDROID_UPLOAD_CERT_SHA256" bin/*.aab
-          fi
-      - name: Remove temporary signing key
-        if: always()
-        run: rm -f "$RUNNER_TEMP/release.keystore"
-      - name: Upload AAB
+          buildozer -v android release
+          buildozer --profile release-apk -v android release
+      - name: Upload AAB for local signing
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.bundle.outputs.artifact }}
+          name: purenote-release-aab-for-local-signing
           path: bin/*.aab
           if-no-files-found: error
-      - name: Upload build log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: purenote-aab-build-log
-          path: build.log
       - name: Upload APK for local signing
-        if: inputs.local_signing == true
         uses: actions/upload-artifact@v4
         with:
           name: purenote-release-apk-for-local-signing

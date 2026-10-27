@@ -71,7 +71,8 @@ Il workflow **Build PureNote APK** esegue test della logica, lint e prova UI, po
 compila con Buildozer su Ubuntu e verifica firma e assenza di permessi nell’APK.
 Parte su push, pull request oppure manualmente
 in **Actions → Build PureNote APK → Run workflow**. Scarica `purenote-debug-apk`
-negli artifact della run; sono disponibili anche log e anteprime dell’interfaccia.
+negli artifact della run; sono disponibili anche le anteprime dell’interfaccia.
+I log si consultano direttamente nella run, senza artifact diagnostici grezzi.
 La compilazione predefinita è ARM64 per telefono. Per un emulatore Intel/AMD,
 seleziona `x86_64` nel campo `architecture` della compilazione manuale.
 

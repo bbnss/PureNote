@@ -33,6 +33,8 @@ p4a.bootstrap = sdl2
 # Official v2026.05.09 release; don't silently pick up recipe changes.
 p4a.branch = master
 p4a.commit = 58d21141f17c889bf8585f5665921d72028f8831
+# CI supplies the same pinned checkout with disposable pip environments fixed.
+p4a.source_dir =
 
 [app@release-apk]
 android.release_artifact = apk
