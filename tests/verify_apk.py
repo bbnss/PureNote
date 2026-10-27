@@ -27,7 +27,11 @@ def verify_apk(
         details = subprocess.check_output(
             [str(signer), "verify", "--print-certs", str(apk)], text=True
         )
-        actual = re.findall(r"certificate SHA-256 digest: ([0-9a-f]+)", details)
+        actual = re.findall(
+            r"^Signer #\d+ certificate SHA-256 digest: ([0-9a-f]+)$",
+            details,
+            re.MULTILINE,
+        )
         if actual != [expected]:
             raise ValueError("APK certificate does not match the confirmed Play app certificate")
     manifest = subprocess.check_output(
