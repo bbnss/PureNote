@@ -6,6 +6,7 @@ from kivy.resources import resource_find
 
 BG = (0.047, 0.071, 0.059, 1)
 PANEL = (0.071, 0.102, 0.082, 1)
+BUTTON = (0.10, 0.145, 0.115, 1)
 LINE = (0.16, 0.22, 0.18, 1)
 ACCENT = (0.64, 0.86, 0.69, 1)
 TEXT = (0.86, 0.90, 0.87, 1)

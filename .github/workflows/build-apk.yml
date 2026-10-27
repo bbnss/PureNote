@@ -4,6 +4,14 @@ on:
     branches: ['**']
   pull_request:
   workflow_dispatch:
+    inputs:
+      architecture:
+        description: 'ARM64 per telefono oppure x86_64 per emulatore'
+        type: choice
+        default: arm64-v8a
+        options:
+          - arm64-v8a
+          - x86_64
 permissions:
   contents: read
 concurrency:
@@ -20,6 +28,9 @@ jobs:
       PYTHONFORANDROID_PREREQUISITES_INSTALL_INTERACTIVE: '0'
     steps:
       - uses: actions/checkout@v4
+      - name: Select emulator architecture
+        if: inputs.architecture == 'x86_64'
+        run: sed -i 's/^android.archs = .*/android.archs = x86_64/' buildozer.spec
       - uses: ./.github/actions/android-build
       - name: Restore optional persistent debug signing key
         shell: bash

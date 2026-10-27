@@ -59,6 +59,8 @@ PURENOTE_DB=/tmp/purenote-demo.db .venv/bin/python main.py
 La prova UI usa un database temporaneo, esercita il ciclo reale di Kivy e genera
 anteprime in `/tmp/purenote-preview`. In CI gira con Xvfb. La simulazione degli
 inset verifica il layout ridotto: non sostituisce una prova della tastiera Android.
+La CI controlla anche densità Android 2,625 e caratteri al 150%, con verifiche
+su testo, barra superiore e contatori per evitare sovrapposizioni.
 
 ## APK su GitHub
 
@@ -67,6 +69,8 @@ compila con Buildozer su Ubuntu e verifica firma e assenza di permessi nell’AP
 Parte su push, pull request oppure manualmente
 in **Actions → Build PureNote APK → Run workflow**. Scarica `purenote-debug-apk`
 negli artifact della run; sono disponibili anche log e anteprime dell’interfaccia.
+La compilazione predefinita è ARM64 per telefono. Per un emulatore Intel/AMD,
+seleziona `x86_64` nel campo `architecture` della compilazione manuale.
 
 La toolchain è fissata in `requirements-build.txt` e `buildozer.spec`:
 Buildozer 1.6.0, Kivy 2.3.1, python-for-android v2026.05.09 (commit esatto),

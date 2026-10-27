@@ -14,7 +14,7 @@ from kivy.core.clipboard import Clipboard
 from kivy.core.window import Window
 from kivy.lang import Builder
 from kivy.logger import Logger
-from kivy.metrics import dp
+from kivy.metrics import dp, sp
 from kivy.properties import BooleanProperty, ListProperty, NumericProperty, StringProperty
 from kivy.uix.behaviors import ButtonBehavior
 from kivy.uix.boxlayout import BoxLayout
@@ -41,6 +41,12 @@ class QuietButton(ButtonBehavior, Label):
     danger = BooleanProperty(False)
 
 
+class IconButton(QuietButton):
+    """Small canvas icons keep navigation independent of font glyph coverage."""
+
+    icon = StringProperty("menu")
+
+
 class NoteInput(TextInput):
     pass
 
@@ -65,6 +71,9 @@ class EditorScreen(Screen):
     counts = StringProperty("0 parole   ·   0 caratteri   ·   ≈0 token")
     status = StringProperty("Salvataggio automatico")
     save_error = BooleanProperty(False)
+    words = StringProperty("0")
+    characters = StringProperty("0")
+    tokens = StringProperty("≈0")
     loading = False
 
     def on_text_changed(self, text):
@@ -144,6 +153,9 @@ class PureNoteApp(App):
 
     def _update_stats(self, *_):
         stats = count_text(self.session.text)
+        self.editor.words = str(stats.words)
+        self.editor.characters = str(stats.characters)
+        self.editor.tokens = f"≈{stats.estimated_tokens}"
         self.editor.counts = (
             f"{stats.words} parole   ·   {stats.characters} caratteri"
             f"   ·   ≈{stats.estimated_tokens} token"
@@ -271,21 +283,44 @@ class PureNoteApp(App):
             label.bind(size=lambda widget, size: setattr(widget, "text_size", size))
         return label
 
-    def _dialog(self, title: str, content, *, height=0.65) -> Popup:
+    def _dialog(self, title: str, content, *, height=0.65, preferred_height=None) -> Popup:
         if self._popup:
             self._popup.dismiss()
         popup = Popup(
             title=title,
             content=content,
-            size_hint=(0.94, height),
+            size_hint=(None, None),
             background="",
             background_color=theme.PANEL,
             separator_color=theme.LINE,
             title_font=theme.FONT_BODY,
             title_color=theme.ACCENT,
             title_size="18sp",
+            title_align="left",
+            padding=dp(16),
         )
-        popup.bind(on_dismiss=lambda *_: setattr(self, "_popup", None))
+
+        def fit(*_):
+            left, top, right, bottom = self.insets
+            width = max(dp(160), Window.width - left - right - dp(32))
+            available = max(dp(140), Window.height - top - bottom - dp(32))
+            popup.width = min(dp(440), width)
+            popup.height = min(preferred_height or available * height, available)
+            popup.center = (
+                left + (Window.width - left - right) / 2,
+                bottom + (Window.height - top - bottom) / 2,
+            )
+
+        def dismissed(*_):
+            Window.unbind(size=fit)
+            self.unbind(insets=fit)
+            if self._popup is popup:
+                self._popup = None
+
+        Window.bind(size=fit)
+        self.bind(insets=fit)
+        popup.bind(on_dismiss=dismissed)
+        fit()
         self._popup = popup
         popup.open()
         return popup
@@ -296,7 +331,7 @@ class PureNoteApp(App):
         return button
 
     def _actions(self, title: str, actions: list[tuple[str, Callable]], message=""):
-        box = BoxLayout(orientation="vertical", spacing=dp(8), padding=dp(8))
+        box = BoxLayout(orientation="vertical", spacing=dp(12))
         if message:
             scroll = ScrollView(do_scroll_x=False)
             label = self.message_label(message, scrollable=True)
@@ -308,23 +343,31 @@ class PureNoteApp(App):
             items.bind(minimum_height=items.setter("height"))
             scroll.add_widget(items)
             box.add_widget(scroll)
-        popup = self._dialog(title, box)
+        button_height = max(dp(48), sp(15) + dp(28))
+        preferred = dp(96) + (button_height + dp(6)) * (len(actions) + 1)
+        popup = self._dialog(
+            title, box, preferred_height=max(preferred, dp(400)) if message else preferred
+        )
         for text, action in actions:
 
             def invoke(fn=action):
                 popup.dismiss()
                 fn()
 
-            items.add_widget(self._button(text, invoke))
+            button = self._button(text, invoke)
+            button.halign = "left"
+            items.add_widget(button)
         box.add_widget(self._button("Chiudi", popup.dismiss))
 
     def show_message(self, message: str):
         self._actions("PureNote", [], message)
 
     def confirm(self, title: str, message: str, callback: Callable, label="Conferma"):
-        box = BoxLayout(orientation="vertical", spacing=dp(12), padding=dp(8))
-        box.add_widget(self.message_label(message))
-        popup = self._dialog(title, box, height=0.5)
+        box = BoxLayout(orientation="vertical", spacing=dp(12))
+        scroll = ScrollView(do_scroll_x=False)
+        scroll.add_widget(self.message_label(message, scrollable=True))
+        box.add_widget(scroll)
+        popup = self._dialog(title, box, preferred_height=dp(400))
 
         def accept():
             popup.dismiss()
@@ -345,7 +388,11 @@ class PureNoteApp(App):
         actions = []
         if self.root.current == "editor":
             actions.extend(
-                [("Condividi nota", self.share_note), ("Sposta nel cestino", self.trash_note)]
+                [
+                    ("Nuova nota", self.new_note),
+                    ("Condividi nota", self.share_note),
+                    ("Sposta nel cestino", self.trash_note),
+                ]
             )
             if self.session.error:
                 actions.append(("Riprova salvataggio", self.flush))
@@ -359,7 +406,7 @@ class PureNoteApp(App):
                 ("Informazioni sui contatori", self.explain_counts),
             ]
         )
-        self._actions("PureNote", actions)
+        self._actions("Opzioni nota" if self.root.current == "editor" else "Opzioni", actions)
 
     def explain_counts(self):
         self.show_message(
@@ -430,7 +477,7 @@ class PureNoteApp(App):
         if note is None:
             return
         self._actions(
-            note.title,
+            "Nota nel cestino",
             [
                 ("Ripristina", lambda: self._storage_action(lambda: self._restore_note(note_id))),
                 (
@@ -443,6 +490,7 @@ class PureNoteApp(App):
                     ),
                 ),
             ],
+            message=note.title,
         )
 
     def _restore_note(self, note_id):

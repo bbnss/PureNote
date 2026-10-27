@@ -12,12 +12,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from kivy.clock import Clock  # noqa: E402
 from kivy.core.window import Window  # noqa: E402
+from kivy.metrics import dp  # noqa: E402
+from kivy.uix.label import Label  # noqa: E402
 
 from main import PureNoteApp  # noqa: E402
 
 OUTPUT = Path(os.environ.get("PURENOTE_SCREENSHOTS", "/tmp/purenote-preview"))
 OUTPUT.mkdir(parents=True, exist_ok=True)
-Window.size = (390, 780)
+Window.size = (dp(390), dp(780))
 
 
 class SmokeApp(PureNoteApp):
@@ -75,6 +77,7 @@ class SmokeApp(PureNoteApp):
     def editor_capture(self):
         assert self.editor.counts.startswith("22 parole")
         assert self.editor.status == "Tutto salvato"
+        self.assert_editor_layout()
         self.root.export_to_png(str(OUTPUT / "editor.png"))
 
     def failure_and_retry(self):
@@ -127,23 +130,43 @@ class SmokeApp(PureNoteApp):
         self._popup.export_to_png(str(OUTPUT / "menu.png"))
         self._popup.dismiss()
         # Simulate the layout reduction, without pretending this is a real IME test.
-        self.insets = [0, 24, 0, 290]
+        self.insets = [0, dp(24), 0, dp(290)]
 
     def keyboard_layout(self):
-        assert self.editor.ids.body.height > 200
-        assert self.editor.ids.body.y >= 290
+        assert self.editor.ids.body.height > dp(120)
+        assert self.editor.ids.body.y >= dp(290)
+        self.assert_editor_layout()
         self.root.export_to_png(str(OUTPUT / "keyboard-layout.png"))
         self.insets = [0, 0, 0, 0]
-        Window.size = (320, 568)
+        Window.size = (dp(320), dp(568))
 
     def narrow_screen(self):
-        assert self.editor.ids.body.width == 320
-        assert self.editor.ids.body.height > 300
+        assert self.editor.ids.body.width == dp(320)
+        assert self.editor.ids.body.height > dp(160)
+        self.assert_editor_layout()
         self.root.export_to_png(str(OUTPUT / "small-screen.png"))
         self.explain_counts()
 
     def counts_dialog(self):
         assert self._popup is not None
+        assert self._popup.width <= Window.width
+        assert self._popup.height <= Window.height
+
+    def assert_editor_layout(self):
+        """Catch text bleeding and overlapping regions at Android densities."""
+        body = self.editor.ids.body
+        toolbar = self.editor.ids.toolbar
+        footer = self.editor.ids.footer
+        assert body.top <= toolbar.y + 1
+        assert footer.top <= body.y + 1
+        for region in (toolbar, footer):
+            for widget in region.walk():
+                if isinstance(widget, Label) and widget.text and widget.height:
+                    assert widget.texture_size[1] <= widget.height + 1, (
+                        widget.text,
+                        widget.texture_size,
+                        widget.size,
+                    )
 
     def counts_capture(self):
         self._popup.export_to_png(str(OUTPUT / "counts.png"))
