@@ -15,7 +15,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: apk-${{ github.ref }}
+  group: apk-${{ github.ref }}-${{ inputs.architecture || 'arm64-v8a' }}
   cancel-in-progress: true
 jobs:
   checks:
