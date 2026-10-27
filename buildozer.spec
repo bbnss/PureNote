@@ -7,8 +7,8 @@ source.dir = .
 source.include_exts = py,png,jpg,ttf,kv
 source.exclude_exts = bak,orig
 source.exclude_dirs = .venv,.build-venv,.git,.github,tests,images,__pycache__,PureNote_export,.pytest_cache,.ruff_cache
-version = 3.0.1
-android.numeric_version = 10217
+version = 3.0.2
+android.numeric_version = 10218
 # Avoid a transitive Android wheel that p4a's pure-Python install stage rejects.
 requirements = python3,kivy==2.3.1,sqlite3,pyjnius,charset_normalizer==3.4.2
 presplash.filename = %(source.dir)s/logo.png

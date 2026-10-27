@@ -38,8 +38,8 @@ background/riapertura, aggiornamento con dati esistenti, selettore file,
 condivisione, backup e ripristino. Verifica poi i controlli della Play Console.
 
 Ogni nuovo upload richiede un `android.numeric_version` strettamente maggiore
-in `buildozer.spec`. Questa revisione usa `version = 3.0.1` e
-`android.numeric_version = 10217`, successivo al precedente 10216.
+in `buildozer.spec`. Questa revisione usa `version = 3.0.2` e
+`android.numeric_version = 10218`, successivo al precedente 10217.
 
 ## Compilazione locale facoltativa
 

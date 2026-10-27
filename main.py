@@ -14,7 +14,7 @@ from kivy.core.clipboard import Clipboard
 from kivy.core.window import Window
 from kivy.lang import Builder
 from kivy.logger import Logger
-from kivy.metrics import dp, sp
+from kivy.metrics import dp
 from kivy.properties import BooleanProperty, ListProperty, NumericProperty, StringProperty
 from kivy.uix.behaviors import ButtonBehavior
 from kivy.uix.boxlayout import BoxLayout
@@ -100,6 +100,8 @@ class PureNoteApp(App):
     insets = ListProperty([0, 0, 0, 0])
 
     def build(self):
+        if platform == "android":
+            theme.configure_android_scaling()
         self.title = "PureNote"
         self.icon = str(BASE_DIR / "logo.png")
         Window.clearcolor = theme.BG
@@ -277,7 +279,7 @@ class PureNoteApp(App):
         label = Label(
             text=text,
             font_name=theme.FONT_BODY,
-            font_size="16sp",
+            font_size=theme.font(16),
             color=theme.TEXT,
             halign="left",
             valign="middle",
@@ -305,7 +307,7 @@ class PureNoteApp(App):
             separator_color=theme.LINE,
             title_font=theme.FONT_BODY,
             title_color=theme.ACCENT,
-            title_size="18sp",
+            title_size=theme.font(18),
             title_align="left",
             padding=dp(16),
         )
@@ -320,6 +322,10 @@ class PureNoteApp(App):
                 left + (Window.width - left - right) / 2,
                 bottom + (Window.height - top - bottom) / 2,
             ]
+            popup.pos_hint = {
+                "center_x": popup.safe_center[0] / Window.width,
+                "center_y": popup.safe_center[1] / Window.height,
+            }
             popup.center = popup.safe_center
 
         def dismissed(*_):
@@ -355,7 +361,7 @@ class PureNoteApp(App):
             items.bind(minimum_height=items.setter("height"))
             scroll.add_widget(items)
             box.add_widget(scroll)
-        button_height = max(dp(48), sp(15) + dp(28))
+        button_height = max(dp(48), theme.font(15) + dp(28))
         preferred = dp(96) + (button_height + dp(6)) * (len(actions) + 1)
         popup = self._dialog(
             title, box, preferred_height=max(preferred, dp(400)) if message else preferred

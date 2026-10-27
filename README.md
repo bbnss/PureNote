@@ -59,8 +59,11 @@ PURENOTE_DB=/tmp/purenote-demo.db .venv/bin/python main.py
 La prova UI usa un database temporaneo, esercita il ciclo reale di Kivy e genera
 anteprime in `/tmp/purenote-preview`. In CI gira con Xvfb. La simulazione degli
 inset verifica il layout ridotto: non sostituisce una prova della tastiera Android.
-La CI controlla anche densità Android 2,625 e caratteri al 150%, con verifiche
+La CI controlla anche densità Android 2,625 e caratteri al 200%, con verifiche
 su testo, barra superiore e contatori per evitare sovrapposizioni.
+Su Android gli spazi usano la densità del display e i caratteri la conversione
+nativa `TypedValue.applyDimension`, che rispetta anche la scala non lineare
+da Android 14. Il font non viene moltiplicato due volte per la preferenza utente.
 
 ## APK su GitHub
 

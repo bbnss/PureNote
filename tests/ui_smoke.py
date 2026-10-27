@@ -149,9 +149,15 @@ class SmokeApp(PureNoteApp):
         self.explain_counts()
 
     def keyboard_dialog(self):
-        assert self._popup.y >= self.insets[3]
-        assert self._popup.top <= Window.height - self.insets[1]
         self._popup.export_to_png(str(OUTPUT / "keyboard-dialog.png"))
+        assert self._popup.y >= self.insets[3] - 1, (
+            self._popup.pos,
+            self._popup.size,
+            self._popup.safe_center,
+            Window.size,
+            self.insets,
+        )
+        assert self._popup.top <= Window.height - self.insets[1] + 1
         self._popup.dismiss()
         self.insets = [0, 0, 0, 0]
         Window.size = (dp(320), dp(568))

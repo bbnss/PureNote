@@ -26,12 +26,12 @@ jobs:
           LIBGL_ALWAYS_SOFTWARE: '1'
           PURENOTE_SCREENSHOTS: ${{ runner.temp }}/purenote-preview
         run: xvfb-run -a python tests/ui_smoke.py
-      - name: Check Android density and enlarged text
+      - name: Check Android density and text at 200 percent
         env:
           KIVY_NO_CONSOLELOG: '1'
           LIBGL_ALWAYS_SOFTWARE: '1'
           KIVY_METRICS_DENSITY: '2.625'
-          KIVY_METRICS_FONTSCALE: '1.5'
+          KIVY_METRICS_FONTSCALE: '2'
           PURENOTE_SCREENSHOTS: ${{ runner.temp }}/purenote-preview/enlarged-text
         run: xvfb-run -a -s '-screen 0 1440x2560x24' python tests/ui_smoke.py
       - name: Upload UI previews
