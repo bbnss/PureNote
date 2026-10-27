@@ -86,6 +86,16 @@ class RootManager(ScreenManager):
     pass
 
 
+class InsetPopup(Popup):
+    """Keep Kivy's modal centering inside the area above the Android keyboard."""
+
+    safe_center = ListProperty([0, 0])
+
+    def _align_center(self, *_):
+        if self._is_open:
+            self.center = self.safe_center
+
+
 class PureNoteApp(App):
     insets = ListProperty([0, 0, 0, 0])
 
@@ -286,7 +296,7 @@ class PureNoteApp(App):
     def _dialog(self, title: str, content, *, height=0.65, preferred_height=None) -> Popup:
         if self._popup:
             self._popup.dismiss()
-        popup = Popup(
+        popup = InsetPopup(
             title=title,
             content=content,
             size_hint=(None, None),
@@ -306,10 +316,11 @@ class PureNoteApp(App):
             available = max(dp(140), Window.height - top - bottom - dp(32))
             popup.width = min(dp(440), width)
             popup.height = min(preferred_height or available * height, available)
-            popup.center = (
+            popup.safe_center = [
                 left + (Window.width - left - right) / 2,
                 bottom + (Window.height - top - bottom) / 2,
-            )
+            ]
+            popup.center = popup.safe_center
 
         def dismissed(*_):
             Window.unbind(size=fit)
@@ -320,6 +331,7 @@ class PureNoteApp(App):
         Window.bind(size=fit)
         self.bind(insets=fit)
         popup.bind(on_dismiss=dismissed)
+        popup.bind(on_open=fit)
         fit()
         self._popup = popup
         popup.open()

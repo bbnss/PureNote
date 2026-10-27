@@ -39,6 +39,7 @@ class SmokeApp(PureNoteApp):
                 self.trash_and_restore,
                 self.menu_capture,
                 self.keyboard_layout,
+                self.keyboard_dialog,
                 self.narrow_screen,
                 self.counts_dialog,
                 self.counts_capture,
@@ -145,6 +146,13 @@ class SmokeApp(PureNoteApp):
         assert self.editor.ids.body.y >= dp(290)
         self.assert_editor_layout()
         self.root.export_to_png(str(OUTPUT / "keyboard-layout.png"))
+        self.explain_counts()
+
+    def keyboard_dialog(self):
+        assert self._popup.y >= self.insets[3]
+        assert self._popup.top <= Window.height - self.insets[1]
+        self._popup.export_to_png(str(OUTPUT / "keyboard-dialog.png"))
+        self._popup.dismiss()
         self.insets = [0, 0, 0, 0]
         Window.size = (dp(320), dp(568))
 
