@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <title>PureNote</title>
+  <desc>Un foglio verde salvia con angolo ripiegato, due righe di testo e un cursore su fondo verde scuro.</desc>
+  <rect width="512" height="512" rx="112" fill="#0C120F"/>
+  <g fill="none" stroke="#A3DCB0" stroke-width="20" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M176 120H290L360 190V368A24 24 0 0 1 336 392H176A24 24 0 0 1 152 368V144A24 24 0 0 1 176 120Z"/>
+    <path d="M290 120V190H360"/>
+    <path d="M202 234H310M202 278H310M202 322H244"/>
+  </g>
+  <path fill="#A3DCB0" d="M270 308H288V336H270Z"/>
+</svg>

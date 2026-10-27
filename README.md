@@ -1,29 +1,128 @@
 # PureNote
-Basic note-taking application for Android, built with Python and Kivy. Store your notes locally for quick access and privacy. Android app.
 
-# Features
-Create and Edit Notes
-Save Notes Locally
-Counter letters in the notes
-Easy Navigation
+Un’app di note Android scritta in Python e Kivy. Rétro sobrio, un solo campo di
+scrittura, nessun account. Le note restano in un database SQLite privato.
 
+<p>
+  <img src="images/purenote-editor.png" alt="Editor PureNote" width="280">
+  <img src="images/purenote-list.png" alt="Lista delle note" width="280">
+</p>
 
-# Screenshot
-![Screenshot dell'app](images/Screenshot_PureNote.png), ![Screenshot dell'app](images/Screenshot2_PureNote.png)
+## Scrivere e ritrovare
 
+- All’apertura ritrovi l’ultima nota. Una nuova installazione parte da un foglio vuoto.
+- La prima riga non vuota dà il titolo alla nota; non c’è un campo titolo separato.
+- Autosalvataggio dopo 300 ms senza modifiche e almeno ogni 2 secondi durante
+  la digitazione continua. Cambio nota, background e chiusura normale forzano il salvataggio.
+- Lista ordinata per ultima modifica, ricerca nel testo e condivisione Android.
+- Cestino con ripristino, annullamento per 8 secondi e conferma prima di eliminare definitivamente.
+- Backup JSON esportabile e ripristinabile tramite il selettore file di Android,
+  senza permessi generali per accedere alla memoria.
 
-# Used
-Python
-Kivy
-Buildozer
+Il backup automatico di sistema Android è disabilitato: l’esportazione manuale
+permette di scegliere dove conservare una copia delle note.
 
-# Installation
-To install the app on your Android device, download the APK file and follow the installation prompts.
-[![Play Store](images/google-play-badge-PureNote.png)](https://play.google.com/store/apps/details?id=bbnss.test.purenote&pcampaignid=web_share)
+Se un salvataggio fallisce, il testo resta nell’editor: l’app riprova e blocca
+il cambio nota. Il menu permette di condividere il testo anche in questo caso.
+L’arresto forzato del processo può perdere le modifiche ancora in attesa di salvataggio.
+Un foglio nuovo lasciato vuoto non crea una nota; svuotare una nota esistente la conserva.
 
-https://play.google.com/store/apps/details?id=bbnss.test.purenote&pcampaignid=web_share
+I contatori riguardano tutto il testo, inclusa la prima riga:
 
-OR
+| Contatore | Convenzione |
+| --- | --- |
+| Parole | Sequenze separate da spazi o altro whitespace |
+| Caratteri | Punti di codice Unicode, inclusi spazi e ritorni a capo |
+| ≈ Token | `ceil(caratteri / 4)`, una stima; non usa un tokenizer specifico |
 
-## APK Android
-https://github.com/bbnss/PureNote/releases/tag/APK
+## Avvio e verifiche su desktop
+
+Python 3.11 è la versione usata per sviluppo e CI.
+
+```bash
+python3.11 -m venv .venv
+.venv/bin/python -m pip install -r requirements-dev.txt
+.venv/bin/python main.py
+.venv/bin/python -m pytest -q
+.venv/bin/ruff check .
+.venv/bin/python tests/ui_smoke.py
+```
+
+Su desktop la condivisione copia il testo negli appunti; backup e ripristino usano
+un selettore file Kivy. Il database predefinito è `notes.db` accanto a `main.py`.
+Per provare l’app senza toccare le note locali:
+
+```bash
+PURENOTE_DB=/tmp/purenote-demo.db .venv/bin/python main.py
+```
+
+La prova UI usa un database temporaneo, esercita il ciclo reale di Kivy e genera
+anteprime in `/tmp/purenote-preview`. In CI gira con Xvfb. La simulazione degli
+inset verifica il layout ridotto: non sostituisce una prova della tastiera Android.
+La CI controlla anche densità Android 2,625 e caratteri al 200%, con verifiche
+su testo, barra superiore e contatori per evitare sovrapposizioni.
+Su Android gli spazi usano la densità del display e i caratteri la conversione
+nativa `TypedValue.applyDimension`, che rispetta anche la scala non lineare
+da Android 14. Il font non viene moltiplicato due volte per la preferenza utente.
+
+## APK su GitHub
+
+Il workflow **Build PureNote APK** esegue test della logica, lint e prova UI, poi
+compila con Buildozer su Ubuntu e verifica firma e assenza di permessi nell’APK.
+Parte su push, pull request oppure manualmente
+in **Actions → Build PureNote APK → Run workflow**. Scarica `purenote-debug-apk`
+negli artifact della run; sono disponibili anche le anteprime dell’interfaccia.
+I log si consultano direttamente nella run, senza artifact diagnostici grezzi.
+La compilazione predefinita è ARM64 per telefono. Per un emulatore Intel/AMD,
+seleziona `x86_64` nel campo `architecture` della compilazione manuale.
+
+La toolchain è fissata in `requirements-build.txt` e `buildozer.spec`:
+Buildozer 1.6.0, Kivy 2.3.1, python-for-android v2026.05.09 (commit esatto),
+SDK 36, NDK 28c e Android minimo 7.0 (API 24). Gli esiti della compilazione sono
+disponibili nelle run del workflow; i test locali non sostituiscono la build
+Android e la prova su dispositivo.
+
+`constraints-android.txt` mantiene lo stesso vincolo sulle dipendenze sia nel
+risolutore Android sia nell’installazione dei moduli Python.
+
+La cache riusa SDK, NDK e compilazioni parziali. Per aggiornamenti debug affidabili,
+imposta `ANDROID_DEBUG_KEYSTORE_B64`: il workflow firma esplicitamente l’APK con
+quella chiave dopo la compilazione e controlla che il certificato corrisponda.
+La chiave usa alias `androiddebugkey` e password debug standard `android`.
+Senza secret resta la firma temporanea generata da Gradle, che può cambiare tra run.
+
+Le precedenti build debug 3.0 non hanno conservato una firma stabile. Prima di
+sostituirle, esporta un backup JSON, reinstalla e ripristina il backup. Conserva
+anche una copia locale della nuova chiave debug, fuori dai file versionati.
+
+L’AAB viene preparato dal workflow separato di release: vedi [RELEASE.md](RELEASE.md).
+Il repository non viene pubblicato o inviato su GitHub dall’app.
+
+## Codice e compatibilità dei dati
+
+| Modulo | Responsabilità |
+| --- | --- |
+| `main.py`, `purenote_ui.kv`, `theme.py` | Navigazione, widget e stile |
+| `editor.py` | Sessione, autosalvataggio e gestione degli errori |
+| `db.py` | SQLite, migrazioni transazionali e ultima nota aperta |
+| `backup.py`, `stats.py` | Formato portabile e statistiche offline |
+| `documents.py`, `android_window.py` | Integrazione Android e tastiera |
+
+Al primo avvio con il vecchio database, PureNote crea una copia SQLite
+`notes.db.pre-v3.bak` prima della migrazione. Conserva testo, date, cestino, tag e
+stato delle vecchie note fissate; tag e pin non compaiono più nell’interfaccia.
+I vecchi titoli separati vengono inseriti nel testo solo se non sono già presenti
+nella prima riga. Il Markdown resta testo normale.
+
+Il backup ha questo contenitore, con record delle note comprensivi di
+`title`, `body`, `tags`, `pinned`, `created_at`, `updated_at`, `trashed`:
+
+```json
+{"app": "PureNote", "version": 1, "notes": []}
+```
+
+Gli ID locali non vengono esportati. Il file è UTF-8, con limite di 32 MiB.
+L’importazione valida tutte le note prima di scrivere, aggiunge copie con nuovi ID
+e conserva le note esistenti. Ripristinare due volte lo stesso file crea duplicati.
+I vecchi backup `.db` rimangono copie di sicurezza SQLite e non sono accettati dal
+nuovo importatore JSON.
