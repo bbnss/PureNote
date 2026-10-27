@@ -38,13 +38,17 @@ jobs:
           ANDROID_DEBUG_KEYSTORE_B64: ${{ secrets.ANDROID_DEBUG_KEYSTORE_B64 }}
         run: |
           if [ -n "$ANDROID_DEBUG_KEYSTORE_B64" ]; then
-            mkdir -p "$HOME/.android"
-            printf '%s' "$ANDROID_DEBUG_KEYSTORE_B64" | base64 --decode > "$HOME/.android/debug.keystore"
-            chmod 600 "$HOME/.android/debug.keystore"
+            key_path="$RUNNER_TEMP/purenote-debug.keystore"
+            printf '%s' "$ANDROID_DEBUG_KEYSTORE_B64" | base64 --decode > "$key_path"
+            chmod 600 "$key_path"
+            echo "PURENOTE_DEBUG_KEYSTORE=$key_path" >> "$GITHUB_ENV"
           fi
       - name: Build debug APK
         shell: bash
         run: buildozer -v android debug 2>&1 | tee build.log
+      - name: Sign APK with persistent debug identity
+        if: env.PURENOTE_DEBUG_KEYSTORE != ''
+        run: python tests/sign_apk.py --keystore "$PURENOTE_DEBUG_KEYSTORE" bin/*.apk
       - name: Verify APK signature and permissions
         run: python tests/verify_apk.py bin/*.apk
       - name: Upload APK
@@ -68,3 +72,6 @@ jobs:
             ~/.android
             .buildozer
           key: purenote-android-v4-${{ runner.os }}-${{ hashFiles('buildozer.spec', 'requirements-build.txt', 'constraints-android.txt') }}-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Remove temporary signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/purenote-debug.keystore"

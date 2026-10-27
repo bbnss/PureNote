@@ -84,11 +84,15 @@ Android e la prova su dispositivo.
 `constraints-android.txt` mantiene lo stesso vincolo sulle dipendenze sia nel
 risolutore Android sia nell’installazione dei moduli Python.
 
-La cache riusa SDK, NDK, compilazioni parziali e chiave debug. Per una chiave debug
-stabile anche dopo la scadenza della cache, puoi impostare il secret opzionale
-`ANDROID_DEBUG_KEYSTORE_B64`. L’APK debug è per le prove: per aggiornare
-un’installazione già presente occorre una firma compatibile, oppure usare
-il backup prima di reinstallare.
+La cache riusa SDK, NDK e compilazioni parziali. Per aggiornamenti debug affidabili,
+imposta `ANDROID_DEBUG_KEYSTORE_B64`: il workflow firma esplicitamente l’APK con
+quella chiave dopo la compilazione e controlla che il certificato corrisponda.
+La chiave usa alias `androiddebugkey` e password debug standard `android`.
+Senza secret resta la firma temporanea generata da Gradle, che può cambiare tra run.
+
+Le precedenti build debug 3.0 non hanno conservato una firma stabile. Prima di
+sostituirle, esporta un backup JSON, reinstalla e ripristina il backup. Conserva
+anche una copia locale della nuova chiave debug, fuori dai file versionati.
 
 L’AAB viene preparato dal workflow separato di release: vedi [RELEASE.md](RELEASE.md).
 Il repository non viene pubblicato o inviato su GitHub dall’app.

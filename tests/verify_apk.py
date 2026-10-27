@@ -6,11 +6,15 @@ import subprocess
 from pathlib import Path
 
 
-def verify_apk(apk: Path, sdk: Path) -> None:
+def find_signer(sdk: Path) -> Path:
     candidates = list((sdk / "build-tools").glob("*/apksigner"))
     if not candidates:
         raise FileNotFoundError(f"Android build tools not found in {sdk}")
-    signer = max(candidates, key=lambda path: tuple(map(int, re.findall(r"\d+", path.parent.name))))
+    return max(candidates, key=lambda path: tuple(map(int, re.findall(r"\d+", path.parent.name))))
+
+
+def verify_apk(apk: Path, sdk: Path) -> None:
+    signer = find_signer(sdk)
     subprocess.run([str(signer), "verify", "--verbose", str(apk)], check=True)
     manifest = subprocess.check_output(
         [str(signer.parent / "aapt"), "dump", "badging", str(apk)], text=True
